@@ -1,0 +1,7 @@
+[workspace]
+members = [
+  "sumobrain_common",
+  "sumobrain_embedded",
+  "sumobrain_simulator"
+]
+resolver = "2"
