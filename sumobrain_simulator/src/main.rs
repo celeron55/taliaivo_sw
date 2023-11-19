@@ -1,13 +1,15 @@
 extern crate piston_window;
 extern crate rapier2d;
 extern crate sumobrain_common;
+extern crate arrayvec; // Use static arrays like the embedded code
 
 use piston_window::*;
 use rapier2d::prelude::*;
-use nalgebra::{Vector2, Point2, abs};
+use nalgebra::{Vector2, Point2};
 use std::f64::consts::PI;
 use std::time::Instant;
 use sumobrain_common::{RobotInterface, BrainState};
+use arrayvec::ArrayVec;
 
 const FPS: u64 = 120;
 const UPS: u64 = 120;
@@ -26,6 +28,7 @@ struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
     weapon_throttle: f32, // -100 to +100
+    proximity_sensor_readings: ArrayVec<(f32, f32), 6>,
 }
 
 struct ArenaWall {
@@ -58,8 +61,8 @@ impl RobotInterface for Robot {
         return 0.0;
     }
     // Returns a list of (angle, distance (cm)) tuples for each sensor
-    fn get_proximity_sensors(&self, values: &mut[&(i16, f32)]) {
-        // TODO
+    fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32), 6> {
+        return self.proximity_sensor_readings.clone();
     }
     // X, Y, Z axis values
     fn get_gyroscope_reading(&self) -> (f32, f32, f32) {
@@ -111,6 +114,7 @@ impl Robot {
             left_wheel_position: Point2::new(-5.0, 2.0), // -X=left, -Y=front
             right_wheel_position: Point2::new(5.0, 2.0),
             weapon_throttle: 0.0,
+            proximity_sensor_readings: ArrayVec::new(),
         }
     }
 
@@ -248,11 +252,19 @@ impl Robot {
 
         if let Some(blade_handle) = self.blade_handle {
             if let Some(blade) = rigid_body_set.get_mut(blade_handle) {
-                if abs(&blade.angvel()) < PI as f32 * 2.0 / 60.0 * 10000.0 {
+                if blade.angvel().abs() < PI as f32 * 2.0 / 60.0 * 10000.0 {
                     blade.apply_torque_impulse(dt * 1000.0 * self.weapon_throttle / 100.0, true);
                 }
             }
         }
+
+        self.proximity_sensor_readings.clear();
+        self.proximity_sensor_readings.push((  0.0, 20.0));
+        self.proximity_sensor_readings.push((-45.0, 20.0));
+        self.proximity_sensor_readings.push(( 45.0, 20.0));
+        self.proximity_sensor_readings.push((-90.0, 20.0));
+        self.proximity_sensor_readings.push(( 90.0, 20.0));
+        self.proximity_sensor_readings.push((180.0, 20.0));
     }
 }
 

@@ -1,5 +1,10 @@
 #![no_std]
 
+extern crate arrayvec; // Use static arrays like the embedded code
+
+use arrayvec::ArrayVec;
+use libc_print::std_name::{println, eprintln, dbg};
+
 pub trait RobotInterface {
     // Motor control
     fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32);
@@ -12,7 +17,7 @@ pub trait RobotInterface {
 
     // Sensor readings
     fn get_weapon_current(&self) -> f32; // Current in Amperes
-    fn get_proximity_sensors(&self, values: &mut[&(i16, f32)]); // Returns a list of (angle, distance (cm)) tuples for each sensor
+    fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32), 6>; // Returns a list of (angle, distance (cm)) tuples for each sensor
     fn get_gyroscope_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_battery_cell_voltages(&self, values: &mut[&f32]); // Voltages of individual cells
@@ -56,6 +61,10 @@ impl BrainState {
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
 
         robot.set_weapon_throttle(100.0);
+
+        let proximity_sensor_readings = robot.get_proximity_sensors();
+
+        println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
 
         self.counter += 1;
     }

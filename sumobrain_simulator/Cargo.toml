@@ -10,4 +10,5 @@ sumobrain_common = { path = "../sumobrain_common" }
 rapier2d = "0.17.2"
 piston_window = "0.131.0"
 piston = "0.55.0"
+arrayvec = "0.7.4"
 
