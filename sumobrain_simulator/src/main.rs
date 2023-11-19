@@ -4,6 +4,11 @@ extern crate rapier2d;
 use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2};
+use std::f64::consts::PI;
+
+//const DT: f32 = 1.0 / 60.0;
+const DT: f32 = 0.01;
+//const DT: f32 = 0.1;
 
 const GROUP_EGO: u32 = 0b0001;
 const GROUP_ENEMY: u32 = 0b0010;
@@ -13,6 +18,10 @@ const GROUP_ARENA: u32 = 0b1000;
 struct Robot {
     body_handle: RigidBodyHandle,
     blade_handle: Option<RigidBodyHandle>,
+    left_wheel_position: Point2<f32>,
+    right_wheel_position: Point2<f32>,
+    wheel_speed_left: f32,
+    wheel_speed_right: f32,
 }
 
 struct ArenaWall {
@@ -30,12 +39,19 @@ impl Robot {
             .angvel(angular_velocity)
             .build();
         let box_collider = ColliderBuilder::cuboid(width, height)
-            .density(1.0)
+            .density(0.008) // About right for 11.5x10cm = 900g
             .collision_groups(interaction_groups)
             .build();
         let body_handle = rigid_body_set.insert(box_rigid_body);
         collider_set.insert_with_parent(box_collider, body_handle, rigid_body_set);
-        Robot { body_handle, blade_handle: None }
+        Robot {
+            body_handle,
+            blade_handle: None,
+            wheel_speed_left: 1.0,
+            wheel_speed_right: 1.0,
+            left_wheel_position: Point2::new(-5.0, -2.0),
+            right_wheel_position: Point2::new(5.0, -2.0),
+        }
     }
 
     fn attach_blade(&mut self, rigid_body_set: &mut RigidBodySet, collider_set: &mut ColliderSet,
@@ -98,7 +114,77 @@ impl Robot {
                                 .rot_rad(rotation as f64)
                                 .trans(half_extents.x as f64, half_extents.y as f64),
                               g);
+                    rectangle([0.8, 0.8, 0.8, 1.0], 
+                              [-1.5, half_extents.y as f64 - 6.0, 3.0, 3.0],
+                              transform
+                                .trans(position.translation.x as f64, position.translation.y as f64)
+                                .rot_rad(rotation as f64),
+                              g);
+                    rectangle([0.8, 0.8, 0.2, 1.0], 
+                              [half_extents.x as f64 - 6.0, half_extents.y as f64 - 6.0, 3.0, 3.0],
+                              transform
+                                .trans(position.translation.x as f64, position.translation.y as f64)
+                                .rot_rad(rotation as f64),
+                              g);
                 }
+            }
+        }
+    }
+
+    fn update_movement(&mut self, rigid_body_set: &mut RigidBodySet, dt: f32) {
+        if let Some(body) = rigid_body_set.get_mut(self.body_handle) {
+            let robot_velocity = body.linvel();
+            let robot_angular_velocity = body.angvel();
+            let robot_orientation = body.position().rotation;
+            let robot_inverse_orientation = robot_orientation.inverse();
+
+            const MASS: f32 = 0.45; // Per wheel
+            const NORMAL_FORCE: f32 = 9.81 * MASS;
+            //const KINETIC_FRICTION_COEFFICIENT: f32 = 0.5;
+            // Slippery conditions for pronounced effects for development
+            const KINETIC_FRICTION_COEFFICIENT: f32 = 0.1;
+            let frictional_force_magnitude = KINETIC_FRICTION_COEFFICIENT * NORMAL_FORCE;
+
+            println!("---");
+
+            // Transform global velocity to robot's local space
+            let robot_velocity_local = robot_inverse_orientation * robot_velocity;
+            println!("robot_velocity_local: L={:?}", robot_velocity_local);
+            println!("robot_velocity_world: L={:?}", robot_velocity);
+
+            // Transform wheel positions
+            println!("wheel_position_local: L={:?}\tR={:?}", self.left_wheel_position, self.right_wheel_position);
+            let left_wheel_position_world = body.position().translation * self.left_wheel_position;
+            let right_wheel_position_world = body.position().translation * self.right_wheel_position;
+            println!("wheel_position_world: L={:?}\tR={:?}", left_wheel_position_world, right_wheel_position_world);
+
+            // Local wheel velocities
+            let left_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_left);
+            let right_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_right);
+            println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
+
+            // Calculate the local velocity at the wheel positions
+            let left_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.left_wheel_position.coords;
+            let right_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.right_wheel_position.coords;
+            println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);
+
+            // Calculate the speed differences in the local frame
+            let left_velocity_diff = left_wheel_driven_velocity_local - left_wheel_ground_velocity_local;
+            let right_velocity_diff = right_wheel_driven_velocity_local - right_wheel_ground_velocity_local;
+            println!("velocity_diff: L={:?}\tR={:?}", left_velocity_diff, right_velocity_diff);
+
+            // Apply forces
+            if left_velocity_diff.magnitude() > 0.001 {
+                let left_friction_force_local = left_velocity_diff.normalize() * frictional_force_magnitude;
+                let left_friction_force = robot_orientation * left_friction_force_local;
+                println!("left_friction_force: {:?}", left_friction_force);
+                body.add_force_at_point(left_friction_force, left_wheel_position_world, true);
+            }
+            if right_velocity_diff.magnitude() > 0.001 {
+                let right_friction_force_local = right_velocity_diff.normalize() * frictional_force_magnitude;
+                let right_friction_force = robot_orientation * right_friction_force_local;
+                println!("right_friction_force: {:?}", right_friction_force);
+                body.add_force_at_point(right_friction_force, right_wheel_position_world, true);
             }
         }
     }
@@ -145,7 +231,11 @@ fn main() {
         .unwrap();
 
     let gravity = Vector2::new(0.0, 0.0); // No gravity in a top-down view
-    let integration_parameters = IntegrationParameters::default();
+    let integration_parameters = {
+        let mut integration_parameters = IntegrationParameters::default();
+        integration_parameters.dt = DT;
+        integration_parameters
+    };
     let mut physics_pipeline = PhysicsPipeline::new();
     let mut island_manager = IslandManager::new();
     let mut broad_phase = BroadPhase::new();
@@ -160,21 +250,25 @@ fn main() {
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                35.0, 100.0, 10.0, 11.5, -1.0, Vector2::new(5.0, 0.0), 0.0,
+                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, -2.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),
-        Robot::new(&mut rigid_body_set, &mut collider_set,
+        /*Robot::new(&mut rigid_body_set, &mut collider_set,
+                35.0, 100.0, 10.0, 11.5, -1.0, Vector2::new(5.0, 0.0), 0.0,
+                InteractionGroups::new(
+                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),*/
+        /*Robot::new(&mut rigid_body_set, &mut collider_set,
                 150.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(-1.0, 0.0), -0.2,
                 InteractionGroups::new(
                         (GROUP_ENEMY).into(),
-                        (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
+                        (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),*/
     ];
-    robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+    /*robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
             10.0, 2.0, 2.0, point![0.0, 10.0],
             InteractionGroups::new(
-                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
+                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));*/
 
-    let mut arena_walls = vec![
+    let arena_walls = vec![
         ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 10.0, 180.0 / 2.0, 5.0 / 2.0),
 	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 10.0, 100.0, 5.0 / 2.0, 180.0 / 2.0),
 	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 190.0, 100.0, 5.0 / 2.0, 180.0 / 2.0),
@@ -187,8 +281,10 @@ fn main() {
             clear([0.1; 4], g);
 
             let transform = c.transform
-                .trans(0.0, 60.0)
-                .zoom(2.5);
+                .zoom(2.5)
+                .trans(0.0, 0.0);
+                //.rot_rad(PI)
+                //.trans(-200.0, -200.0);
 
             // Draw robots and walls
             for robot in &robots {
@@ -199,7 +295,25 @@ fn main() {
                 wall.draw(&rigid_body_set, &collider_set, &c, g, &transform);
             }
 
+            // Draw origin dot
+            rectangle([0.8, 0.8, 0.8, 1.0], 
+                      [0.0, 0.0, 5.0, 5.0],
+                      transform
+                        .trans(10.0, 7.0)
+                        .rot_rad(PI * 0.25),
+                      g);
         });
+
+        for robot in &mut robots {
+            if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
+                body.reset_forces(true);
+                body.reset_torques(true);
+            }
+        }
+
+        for robot in &mut robots {
+            robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
+        }
 
         // Update physics
         physics_pipeline.step(
