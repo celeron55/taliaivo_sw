@@ -145,44 +145,44 @@ impl Robot {
             // meters
             let frictional_force_magnitude = KINETIC_FRICTION_COEFFICIENT * NORMAL_FORCE * 100.0;
 
-            println!("---");
+            //println!("---");
 
             // Transform global velocity to robot's local space
             let robot_velocity_local = robot_inverse_orientation * robot_velocity;
-            println!("robot_velocity_local: L={:?}", robot_velocity_local);
-            println!("robot_velocity_world: L={:?}", robot_velocity);
+            //println!("robot_velocity_local: L={:?}", robot_velocity_local);
+            //println!("robot_velocity_world: L={:?}", robot_velocity);
 
             // Transform wheel positions
-            println!("wheel_position_local: L={:?}\tR={:?}", self.left_wheel_position, self.right_wheel_position);
+            //println!("wheel_position_local: L={:?}\tR={:?}", self.left_wheel_position, self.right_wheel_position);
             let left_wheel_position_world = robot_orientation * self.left_wheel_position + body.position().translation.vector;
             let right_wheel_position_world = robot_orientation * self.right_wheel_position + body.position().translation.vector;
-            println!("wheel_position_world: L={:?}\tR={:?}", left_wheel_position_world, right_wheel_position_world);
+            //println!("wheel_position_world: L={:?}\tR={:?}", left_wheel_position_world, right_wheel_position_world);
 
             // Local wheel velocities
             let left_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_left);
             let right_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_right);
-            println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
+            //println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
 
             let left_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.left_wheel_position.coords;
             let right_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.right_wheel_position.coords;
-            println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);
+            //println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);
 
             // Calculate the speed differences in the local frame
             let left_velocity_diff = left_wheel_driven_velocity_local - left_wheel_ground_velocity_local;
             let right_velocity_diff = right_wheel_driven_velocity_local - right_wheel_ground_velocity_local;
-            println!("velocity_diff: L={:?}\tR={:?}", left_velocity_diff, right_velocity_diff);
+            //println!("velocity_diff: L={:?}\tR={:?}", left_velocity_diff, right_velocity_diff);
 
             // Apply forces
             if left_velocity_diff.magnitude() > 0.001 {
                 let left_friction_force_local = left_velocity_diff.normalize() * frictional_force_magnitude;
                 let left_friction_force = robot_orientation * left_friction_force_local;
-                println!("left_friction_force: {:?}", left_friction_force);
+                //println!("left_friction_force: {:?}", left_friction_force);
                 body.add_force_at_point(left_friction_force, left_wheel_position_world, true);
             }
             if right_velocity_diff.magnitude() > 0.001 {
                 let right_friction_force_local = right_velocity_diff.normalize() * frictional_force_magnitude;
                 let right_friction_force = robot_orientation * right_friction_force_local;
-                println!("right_friction_force: {:?}", right_friction_force);
+                //println!("right_friction_force: {:?}", right_friction_force);
                 body.add_force_at_point(right_friction_force, right_wheel_position_world, true);
             }
         }
