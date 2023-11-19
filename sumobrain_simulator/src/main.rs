@@ -1,11 +1,13 @@
 extern crate piston_window;
 extern crate rapier2d;
+extern crate sumobrain_common;
 
 use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2};
 use std::f64::consts::PI;
 use std::time::Instant;
+use sumobrain_common::{RobotInterface, BrainState};
 
 const FPS: u64 = 120;
 const UPS: u64 = 120;
@@ -27,6 +29,61 @@ struct Robot {
 
 struct ArenaWall {
     body_handle: RigidBodyHandle,
+}
+
+impl RobotInterface for Robot {
+    // Motor control
+    fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32) {
+        self.wheel_speed_left = left_speed_cm_s;
+        self.wheel_speed_right = right_speed_cm_s;
+    }
+    
+    // Weapon control
+    // -100 to +100
+    fn set_weapon_throttle(&mut self, throttle_percentage: i8) {
+        // TODO
+    }
+
+    // R/C Receiver Inputs
+    // Returns values from all R/C receiver channels
+    fn get_rc_input_values(&self, values: &mut[&f32]) {
+        // TODO
+    }
+
+    // Sensor readings
+    // Current in Amperes
+    fn get_weapon_current(&self) -> f32 {
+        // TODO
+        return 0.0;
+    }
+    // Returns a list of (angle, distance (cm)) tuples for each sensor
+    fn get_proximity_sensors(&self, values: &mut[&(i16, f32)]) {
+        // TODO
+    }
+    // X, Y, Z axis values
+    fn get_gyroscope_reading(&self) -> (f32, f32, f32) {
+        // TODO
+        return (0.0, 0.0, 0.0);
+    }
+    // X, Y, Z axis values
+    fn get_accelerometer_reading(&self) -> (f32, f32, f32) {
+        // TODO
+        return (0.0, 0.0, 0.0);
+    }
+    // Voltages of individual cells
+    fn get_battery_cell_voltages(&self, values: &mut[&f32]) {
+        // TODO
+    }
+
+    // LED control
+    fn set_led_status(&mut self, status: bool) {
+        // TODO
+    }
+
+    // Diagnostic data
+    fn set_map(&mut self, map_width: i32, map_data: &[&i8]) {
+        // TODO
+    }
 }
 
 impl Robot {
@@ -281,6 +338,8 @@ fn main() {
         // Repeat for other walls
     ];
 
+    let mut brain = BrainState::new();
+
     let mut counter: u64 = 0;
 
     while let Some(e) = events.next(&mut window) {
@@ -314,20 +373,7 @@ fn main() {
         }
 
         if e.update_args().is_some() {
-            robots[0].wheel_speed_left = {
-                let mut speed = 100.0;
-                if (counter % (UPS * 6)) < (UPS * 3) {
-                    speed = -100.0;
-                }
-                speed
-            };
-            robots[0].wheel_speed_right = {
-                let mut speed = 100.0;
-                if (counter % (UPS * 6)) < (UPS * 3) {
-                    speed = -100.0;
-                }
-                speed
-            };
+            brain.update(&mut robots[0]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {

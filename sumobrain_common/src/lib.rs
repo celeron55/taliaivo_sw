@@ -24,7 +24,37 @@ pub trait RobotInterface {
     fn set_map(&mut self, map_width: i32, map_data: &[&i8]);
 }
 
-pub fn update(robot: &mut dyn RobotInterface) {
-    robot.set_motor_speed(5.0, 5.0);
+const UPS: u64 = 100; // Updates per second
+
+pub struct BrainState {
+    counter: u64,
 }
 
+impl BrainState {
+    pub fn new() -> Self {
+        BrainState {
+            counter: 0,
+        }
+    }
+
+    // Should be called at 10ms interval
+    pub fn update(&mut self, robot: &mut dyn RobotInterface) {
+        let wheel_speed_left = {
+            let mut speed = 100.0;
+            if (self.counter % (UPS * 6)) < (UPS * 3) {
+                speed = -100.0;
+            }
+            speed
+        };
+        let wheel_speed_right = {
+            let mut speed = 100.0;
+            if (self.counter % (UPS * 6)) < (UPS * 3) {
+                speed = -100.0;
+            }
+            speed
+        };
+        robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+
+        self.counter += 1;
+    }
+}
