@@ -27,7 +27,7 @@ struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
     weapon_throttle: f32, // -100 to +100
-    proximity_sensor_readings: ArrayVec<(f32, Option<f32>), 6>,
+    proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
     gyro_z: f32,
 }
 
@@ -60,8 +60,8 @@ impl RobotInterface for Robot {
         // TODO
         return 0.0;
     }
-    // Returns a list of (angle, distance (cm)) tuples for each sensor
-    fn get_proximity_sensors(&self) -> ArrayVec<(f32, Option<f32>), 6> {
+    // Returns a list of (angle, distance (cm), something_seen) tuples for each sensor
+    fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32, bool), 6> {
         return self.proximity_sensor_readings.clone();
     }
     // X, Y, Z axis values
@@ -84,8 +84,10 @@ impl RobotInterface for Robot {
     }
 
     // Diagnostic data
-    fn set_map(&mut self, map_width: i32, map_data: &[&i8]) {
+    fn report_map(&mut self, map_width: u32, map_height: u32, map_data: &[&f32]) {
         // TODO
+    }
+    fn report_position_on_map(&mut self, x: f32, y: f32) {
     }
 }
 
@@ -303,9 +305,9 @@ impl Robot {
                     // structure containing details about the hit configuration.
                     //println!("Hit the collider {:?} with the configuration: {:?}", handle, hit);
 
-                    self.proximity_sensor_readings.push((angle_rad as f32, Some(hit.toi)));
+                    self.proximity_sensor_readings.push((angle_rad as f32, hit.toi, true));
                 } else {
-                    self.proximity_sensor_readings.push((angle_rad as f32, None));
+                    self.proximity_sensor_readings.push((angle_rad as f32, max_detection_distance, false));
                 }
             }
 		}

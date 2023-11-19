@@ -3,7 +3,19 @@
 extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
-use libc_print::std_name::{println, eprintln, dbg};
+use libc_print::std_name::{println, eprintln, print, dbg};
+
+#[derive(Copy, Clone)]
+pub struct Vf {
+    x: f32,
+    y: f32,
+}
+
+impl Vf {
+    pub fn new(x: f32, y: f32) -> Self {
+        Vf { x: x, y: y }
+    }
+}
 
 pub trait RobotInterface {
     // Motor control
@@ -17,7 +29,7 @@ pub trait RobotInterface {
 
     // Sensor readings
     fn get_weapon_current(&self) -> f32; // Current in Amperes
-    fn get_proximity_sensors(&self) -> ArrayVec<(f32, Option<f32>), 6>; // Returns a list of (angle (radians), distance (cm)) tuples for each sensor
+    fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32, bool), 6>; // Returns a list of (angle (radians), distance (cm), something_seen) tuples for each sensor
     fn get_gyroscope_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_battery_cell_voltages(&self, values: &mut[&f32]); // Voltages of individual cells
@@ -26,24 +38,133 @@ pub trait RobotInterface {
     fn set_led_status(&mut self, status: bool);
 
     // Diagnostic data
-    fn set_map(&mut self, map_width: i32, map_data: &[&i8]);
+    fn report_map(&mut self, map_width: u32, map_height: u32, map_data: &[&f32]);
+    fn report_position_on_map(&mut self, x: f32, y: f32);
 }
 
 const UPS: u64 = 100; // Updates per second
+const MAP_T: f32 = 5.0; // Map tile width and height in cm
+const MAP_W_REAL: f32 = 200.0; // Map width in cm
+const MAP_H_REAL: f32 = MAP_W_REAL;
+const MAP_W: u32 = (MAP_W_REAL / MAP_T) as u32; // Map width in tiles
+const MAP_H: u32 = MAP_W;
+const MAP_SIZE: usize = (MAP_W * MAP_H) as usize;
+
+pub struct Map {
+    tile_wh: f32,
+    width: u32,
+    height: u32,
+    data: ArrayVec<f32, MAP_SIZE>,
+}
+
+impl Map {
+    pub fn new() -> Self {
+        let mut data = ArrayVec::new();
+        // TODO: Figure out something better for filling the map (note: fill()
+        // doesn't work)
+        for i in 0..MAP_SIZE {
+            data.push(0.0);
+        }
+        Map {
+            tile_wh: MAP_T,
+            width: MAP_W,
+            height: MAP_H,
+            data: data,
+        }
+    }
+
+    // something_seen: If nothing is found within sensor range, set this to
+    // true, and set distance to the sensor maximum range
+    pub fn paint_proximity_reading(&mut self, starting_position: Vf, angle_rad: f32, distance: f32,
+            something_seen: bool) {
+        // Calculate end point of the ray
+        let direction = Vf::new(angle_rad.cos(), angle_rad.sin());
+        let end_point = Vf {
+            x: starting_position.x + distance * direction.x,
+            y: starting_position.y + distance * direction.y,
+        };
+
+        // Convert to tile indices
+        let mut x0 = (starting_position.x / self.tile_wh) as i32;
+        let mut y0 = (starting_position.y / self.tile_wh) as i32;
+        let x1 = (end_point.x / self.tile_wh) as i32;
+        let y1 = (end_point.y / self.tile_wh) as i32;
+
+        // Bresenham's line algorithm
+        let dx = (x1 - x0).abs();
+        let dy = -(y1 - y0).abs();
+        let sx = if x0 < x1 { 1 } else { -1 };
+        let sy = if y0 < y1 { 1 } else { -1 };
+        let mut err = dx + dy;
+
+        loop {
+            // Paint the current tile
+            if let Some(tile) = self.data.get_mut((y0 as u32 * self.width + x0 as u32) as usize) {
+                *tile = -100.0;
+            }
+
+            if x0 == x1 && y0 == y1 { break; }
+            let e2 = 2 * err;
+            if e2 >= dy { err += dy; x0 += sx; }
+            if e2 <= dx { err += dx; y0 += sy; }
+        }
+
+        // Paint the end tile
+        if let Some(tile) = self.data.get_mut((y1 as u32 * self.width + x1 as u32) as usize) {
+            *tile = 100.0;
+        }
+    }
+
+    pub fn print(&self) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = (y * self.width + x) as usize;
+                let tile_value = self.data[idx];
+                let symbol = if tile_value < -10.0 {
+                    " "
+                } else if tile_value < 10.0 {
+                    "+"
+                } else {
+                    "X"
+                };
+                print!(" {}", symbol);
+            }
+            println!(); // New line at the end of each row
+        }
+    }
+}
 
 pub struct BrainState {
     counter: u64,
+    map: Map,
+    pos: Vf, // Position of robot on map
+    rot: f32, // Angle of robot on map (radians)
+    vel: Vf, // Velocity of robot on map
 }
 
 impl BrainState {
     pub fn new() -> Self {
         BrainState {
             counter: 0,
+            map: Map::new(),
+            pos: Vf::new(100.0, 100.0),
+            rot: 0.0,
+            vel: Vf::new(0.0, 0.0),
         }
     }
 
-    // Should be called at 10ms interval
+    // Should be called at 1.0s / UPS interval
     pub fn update(&mut self, robot: &mut dyn RobotInterface) {
+        // Move robot closer to the center of map if it's near an edge
+        let edge = 20.0;
+        if (self.pos.x - MAP_W_REAL / 2.0).abs() > MAP_W_REAL / 2.0 ||
+                (self.pos.y - MAP_H_REAL / 2.0).abs() > MAP_H_REAL / 2.0 {
+            self.pos.x = MAP_W_REAL / 2.0;
+            self.pos.y = MAP_H_REAL / 2.0;
+            // TODO: Transform the map when moving the robot closer to the center of
+            // the map so that the map hopefully somewhat matches the surroundings
+        }
+
         let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
         println!("gyro_z: {:?}", gyro_z);
 
@@ -71,21 +192,31 @@ impl BrainState {
 
         println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
 
+        for reading in &proximity_sensor_readings {
+            self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
+        }
+
+        self.map.print();
+
         if proximity_sensor_readings.len() >= 6 {
-            if let Some(distance) = proximity_sensor_readings[0].1 {
+            {
+                let distance = proximity_sensor_readings[0].1;
                 if distance < 20.0 {
                     wheel_speed_left = -10.0;
                     wheel_speed_right = -5.0;
                 }
             }
-            if let Some(distance) = proximity_sensor_readings[5].1 {
+            {
+                let distance = proximity_sensor_readings[5].1;
                 if distance < 20.0 {
                     wheel_speed_left = 50.0;
                     wheel_speed_right = 50.0;
                 }
             }
         }
-            
+
+        // TODO: Limit wheel speed changes, i.e. limit acceleration
+
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
 
         let mut weapon_throttle = 100.0;
@@ -93,6 +224,22 @@ impl BrainState {
             weapon_throttle = 0.0;
         }
         robot.set_weapon_throttle(weapon_throttle);
+
+        // TODO: Make sure this is scaled appropriately
+        self.rot += gyro_z / UPS as f32;
+
+        // TODO: Maintain self.rot via motor speeds
+
+        // TODO: Maintain self.vel via accelerometer and self.rot
+
+        // TODO: Maintain self.vel via motor speeds and self.rot
+        let avg_wheel_speed = (wheel_speed_left + wheel_speed_right) / 2.0;
+        self.vel.x = avg_wheel_speed * self.rot.cos();
+        self.vel.y = avg_wheel_speed * self.rot.sin();
+
+        // TODO: Maintain self.pos via self.vel
+        self.pos.x += self.vel.x / UPS as f32;
+        self.pos.y += self.vel.y / UPS as f32;
 
         self.counter += 1;
     }
