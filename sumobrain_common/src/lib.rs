@@ -5,7 +5,7 @@ pub trait RobotInterface {
     fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32);
     
     // Weapon control
-    fn set_weapon_throttle(&mut self, throttle_percentage: i8); // -100 to +100
+    fn set_weapon_throttle(&mut self, throttle_percentage: f32); // -100 to +100
 
     // R/C Receiver Inputs
     fn get_rc_input_values(&self, values: &mut[&f32]); // Returns values from all R/C receiver channels
@@ -54,6 +54,8 @@ impl BrainState {
             speed
         };
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+
+        robot.set_weapon_throttle(100.0);
 
         self.counter += 1;
     }

@@ -4,7 +4,7 @@ extern crate sumobrain_common;
 
 use piston_window::*;
 use rapier2d::prelude::*;
-use nalgebra::{Vector2, Point2};
+use nalgebra::{Vector2, Point2, abs};
 use std::f64::consts::PI;
 use std::time::Instant;
 use sumobrain_common::{RobotInterface, BrainState};
@@ -25,6 +25,7 @@ struct Robot {
     right_wheel_position: Point2<f32>,
     wheel_speed_left: f32,
     wheel_speed_right: f32,
+    weapon_throttle: f32, // -100 to +100
 }
 
 struct ArenaWall {
@@ -40,8 +41,8 @@ impl RobotInterface for Robot {
     
     // Weapon control
     // -100 to +100
-    fn set_weapon_throttle(&mut self, throttle_percentage: i8) {
-        // TODO
+    fn set_weapon_throttle(&mut self, throttle_percentage: f32) {
+        self.weapon_throttle = throttle_percentage;
     }
 
     // R/C Receiver Inputs
@@ -109,6 +110,7 @@ impl Robot {
             wheel_speed_right: 0.0,
             left_wheel_position: Point2::new(-5.0, 2.0), // -X=left, -Y=front
             right_wheel_position: Point2::new(5.0, 2.0),
+            weapon_throttle: 0.0,
         }
     }
 
@@ -243,10 +245,11 @@ impl Robot {
                 body.add_force_at_point(right_friction_force, right_wheel_position_world, true);
             }
         }
+
         if let Some(blade_handle) = self.blade_handle {
             if let Some(blade) = rigid_body_set.get_mut(blade_handle) {
-                if blade.angvel() < PI as f32 * 2.0 / 60.0 * 10000.0 {
-                    blade.apply_torque_impulse(dt * 1000.0, true);
+                if abs(&blade.angvel()) < PI as f32 * 2.0 / 60.0 * 10000.0 {
+                    blade.apply_torque_impulse(dt * 1000.0 * self.weapon_throttle / 100.0, true);
                 }
             }
         }
