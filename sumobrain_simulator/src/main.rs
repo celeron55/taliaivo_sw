@@ -48,9 +48,9 @@ impl Robot {
             body_handle,
             blade_handle: None,
             wheel_speed_left: 1.0,
-            wheel_speed_right: 1.0,
-            left_wheel_position: Point2::new(-5.0, -2.0),
-            right_wheel_position: Point2::new(5.0, -2.0),
+            wheel_speed_right: -1.0,
+            left_wheel_position: Point2::new(-5.0, 2.0), // -X=left, -Y=front
+            right_wheel_position: Point2::new(5.0, 2.0),
         }
     }
 
@@ -59,11 +59,10 @@ impl Robot {
             angular_velocity: f32, blade_axle_p_on_robot: Point2<f32>,
             interaction_groups: InteractionGroups) {
         let blade_rigid_body = RigidBodyBuilder::dynamic()
-            .translation(vector![0.0, 0.0]) // position will be set by the joint
             .angvel(angular_velocity)
             .build();
         let blade_collider = ColliderBuilder::cuboid(blade_width, blade_height)
-            .density(1.0)
+            .density(0.008) // About right for 11.5x10cm = 900g
             .collision_groups(interaction_groups)
             .build();
         let blade_handle = rigid_body_set.insert(blade_rigid_body);
@@ -140,10 +139,10 @@ impl Robot {
 
             const MASS: f32 = 0.45; // Per wheel
             const NORMAL_FORCE: f32 = 9.81 * MASS;
-            //const KINETIC_FRICTION_COEFFICIENT: f32 = 0.5;
-            // Slippery conditions for pronounced effects for development
-            const KINETIC_FRICTION_COEFFICIENT: f32 = 0.1;
-            let frictional_force_magnitude = KINETIC_FRICTION_COEFFICIENT * NORMAL_FORCE;
+            const KINETIC_FRICTION_COEFFICIENT: f32 = 0.2;
+            // Have to multiply by 100 because we use centimeters instead of
+            // meters
+            let frictional_force_magnitude = KINETIC_FRICTION_COEFFICIENT * NORMAL_FORCE * 100.0;
 
             println!("---");
 
@@ -185,6 +184,13 @@ impl Robot {
                 let right_friction_force = robot_orientation * right_friction_force_local;
                 println!("right_friction_force: {:?}", right_friction_force);
                 body.add_force_at_point(right_friction_force, right_wheel_position_world, true);
+            }
+        }
+        if let Some(blade_handle) = self.blade_handle {
+            if let Some(blade) = rigid_body_set.get_mut(blade_handle) {
+                if blade.angvel() < PI as f32 * 2.0 / 60.0 * 10000.0 {
+                    blade.apply_torque_impulse(dt * 50.0, true);
+                }
             }
         }
     }
@@ -250,7 +256,7 @@ fn main() {
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, -2.0), 0.0,
+                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, -5.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),
         /*Robot::new(&mut rigid_body_set, &mut collider_set,
@@ -264,7 +270,7 @@ fn main() {
                         (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),*/
     ];
     /*robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
-            10.0, 2.0, 2.0, point![0.0, 10.0],
+            10.0, 2.0, 0.0, point![0.0, 10.0],
             InteractionGroups::new(
                     (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));*/
 
@@ -276,6 +282,8 @@ fn main() {
         // Repeat for other walls
     ];
 
+    let mut counter: u64 = 0;
+
     while let Some(e) = window.next() {
         window.draw_2d(&e, |c, g, _| {
             clear([0.1; 4], g);
@@ -285,6 +293,21 @@ fn main() {
                 .trans(0.0, 0.0);
                 //.rot_rad(PI)
                 //.trans(-200.0, -200.0);
+
+            /*robots[0].wheel_speed_left = {
+                let mut speed = 30.0;
+                if (counter % 600) >= 300 {
+                    speed = -30.0;
+                }
+                speed
+            };
+            robots[0].wheel_speed_right = {
+                let mut speed = 30.0;
+                if (counter % 600) >= 300 {
+                    speed = 0.0;
+                }
+                speed
+            };*/
 
             // Draw robots and walls
             for robot in &robots {
@@ -331,5 +354,7 @@ fn main() {
 			&physics_hooks,
 			&event_handler,
         );
+
+        counter += 1;
     }
 }
