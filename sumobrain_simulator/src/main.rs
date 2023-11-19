@@ -28,6 +28,7 @@ struct Robot {
     wheel_speed_right: f32,
     weapon_throttle: f32, // -100 to +100
     proximity_sensor_readings: ArrayVec<(f32, Option<f32>), 6>,
+    gyro_z: f32,
 }
 
 struct ArenaWall {
@@ -65,8 +66,7 @@ impl RobotInterface for Robot {
     }
     // X, Y, Z axis values
     fn get_gyroscope_reading(&self) -> (f32, f32, f32) {
-        // TODO
-        return (0.0, 0.0, 0.0);
+        return (0.0, 0.0, self.gyro_z);
     }
     // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32) {
@@ -114,6 +114,7 @@ impl Robot {
             right_wheel_position: Point2::new(5.0, 2.0),
             weapon_throttle: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
+            gyro_z: 0.0,
         }
     }
 
@@ -251,8 +252,14 @@ impl Robot {
 
         if let Some(blade_handle) = self.blade_handle {
             if let Some(blade) = rigid_body_set.get_mut(blade_handle) {
-                if blade.angvel().abs() < PI as f32 * 2.0 / 60.0 * 10000.0 {
+                if blade.angvel().abs() < PI as f32 * 2.0 / 60.0 * 10000.0 * self.weapon_throttle / 100.0 {
                     blade.apply_torque_impulse(dt * 1000.0 * self.weapon_throttle / 100.0, true);
+                } else {
+                    if blade.angvel() > 0.0 {
+                        blade.apply_torque_impulse(dt * 1000.0 * -0.2, true);
+                    } else {
+                        blade.apply_torque_impulse(dt * 1000.0 * 0.2, true);
+                    }
                 }
             }
         }
@@ -261,6 +268,12 @@ impl Robot {
     fn update_sensors(&mut self, query_pipeline: &mut QueryPipeline, collider_set: &ColliderSet,
             rigid_body_set: &RigidBodySet) {
 
+        // Gyroscope
+        if let Some(body) = rigid_body_set.get(self.body_handle) {
+            self.gyro_z = body.angvel();
+        }
+
+        // Proximity sensors
         let position_sensor_angles = [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
         let max_detection_distance: f32 = 40.0;
 

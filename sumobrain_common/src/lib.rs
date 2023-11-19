@@ -44,27 +44,55 @@ impl BrainState {
 
     // Should be called at 10ms interval
     pub fn update(&mut self, robot: &mut dyn RobotInterface) {
-        let wheel_speed_left = {
-            let mut speed = 100.0;
-            if (self.counter % (UPS * 6)) < (UPS * 3) {
-                speed = -100.0;
-            }
-            speed
-        };
-        let wheel_speed_right = {
-            let mut speed = 100.0;
-            if (self.counter % (UPS * 6)) < (UPS * 3) {
-                speed = -100.0;
-            }
-            speed
-        };
-        robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+        let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
+        println!("gyro_z: {:?}", gyro_z);
 
-        robot.set_weapon_throttle(100.0);
+        let mut wheel_speed_left = {
+            let mut speed = 100.0;
+            if (self.counter % (UPS * 6)) < (UPS * 3) {
+                speed = -100.0;
+            }
+            speed
+        };
+        let mut wheel_speed_right = {
+            let mut speed = 100.0;
+            if (self.counter % (UPS * 6)) < (UPS * 3) {
+                speed = -100.0;
+            }
+            speed
+        };
+
+        if gyro_z.abs() > 1.5 {
+            wheel_speed_left *= 0.1;
+            wheel_speed_right *= 0.1;
+        }
 
         let proximity_sensor_readings = robot.get_proximity_sensors();
 
         println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
+
+        if proximity_sensor_readings.len() >= 6 {
+            if let Some(distance) = proximity_sensor_readings[0].1 {
+                if distance < 20.0 {
+                    wheel_speed_left = -10.0;
+                    wheel_speed_right = -5.0;
+                }
+            }
+            if let Some(distance) = proximity_sensor_readings[5].1 {
+                if distance < 20.0 {
+                    wheel_speed_left = 50.0;
+                    wheel_speed_right = 50.0;
+                }
+            }
+        }
+            
+        robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+
+        let mut weapon_throttle = 100.0;
+        if gyro_z.abs() > 1.5 {
+            weapon_throttle = 0.0;
+        }
+        robot.set_weapon_throttle(weapon_throttle);
 
         self.counter += 1;
     }
