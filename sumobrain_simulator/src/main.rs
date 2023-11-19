@@ -5,10 +5,11 @@ use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2};
 use std::f64::consts::PI;
+use std::time::Instant;
 
-//const DT: f32 = 1.0 / 60.0;
-const DT: f32 = 0.01;
-//const DT: f32 = 0.1;
+const FPS: u64 = 120;
+const UPS: u64 = 120;
+const DT: f32 = 1.0 / UPS as f32;
 
 const GROUP_EGO: u32 = 0b0001;
 const GROUP_ENEMY: u32 = 0b0010;
@@ -47,8 +48,8 @@ impl Robot {
         Robot {
             body_handle,
             blade_handle: None,
-            wheel_speed_left: 1.0,
-            wheel_speed_right: -1.0,
+            wheel_speed_left: 0.0,
+            wheel_speed_right: 0.0,
             left_wheel_position: Point2::new(-5.0, 2.0), // -X=left, -Y=front
             right_wheel_position: Point2::new(5.0, 2.0),
         }
@@ -139,7 +140,7 @@ impl Robot {
 
             const MASS: f32 = 0.45; // Per wheel
             const NORMAL_FORCE: f32 = 9.81 * MASS;
-            const KINETIC_FRICTION_COEFFICIENT: f32 = 0.2;
+            const KINETIC_FRICTION_COEFFICIENT: f32 = 0.8;
             // Have to multiply by 100 because we use centimeters instead of
             // meters
             let frictional_force_magnitude = KINETIC_FRICTION_COEFFICIENT * NORMAL_FORCE * 100.0;
@@ -153,8 +154,10 @@ impl Robot {
 
             // Transform wheel positions
             println!("wheel_position_local: L={:?}\tR={:?}", self.left_wheel_position, self.right_wheel_position);
-            let left_wheel_position_world = body.position().translation * self.left_wheel_position;
-            let right_wheel_position_world = body.position().translation * self.right_wheel_position;
+            let left_wheel_position_world = robot_orientation * self.left_wheel_position + body.position().translation.vector;
+            let right_wheel_position_world = robot_orientation * self.right_wheel_position + body.position().translation.vector;
+            //let left_wheel_position_world = body.position().translation * self.left_wheel_position;
+            //let right_wheel_position_world = body.position().translation * self.right_wheel_position;
             println!("wheel_position_world: L={:?}\tR={:?}", left_wheel_position_world, right_wheel_position_world);
 
             // Local wheel velocities
@@ -162,7 +165,20 @@ impl Robot {
             let right_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_right);
             println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
 
-            // Calculate the local velocity at the wheel positions
+            /*// Calculate tangential velocity at each wheel due to rotation
+            let left_tangential_velocity = Vector2::new(-self.left_wheel_position.y, self.left_wheel_position.x) * robot_angular_velocity;
+            let right_tangential_velocity = Vector2::new(-self.right_wheel_position.y, self.right_wheel_position.x) * robot_angular_velocity;
+
+            // Combine linear and tangential velocities to get
+            // total velocity at each wheel
+            let left_wheel_ground_velocity = robot_velocity + left_tangential_velocity;
+            let right_wheel_ground_velocity = robot_velocity + right_tangential_velocity;
+            println!("wheel_ground_velocity: L={:?}\tR={:?}", left_wheel_ground_velocity, right_wheel_ground_velocity);
+
+            let left_wheel_ground_velocity_local = robot_orientation * left_wheel_ground_velocity;
+            let right_wheel_ground_velocity_local = robot_orientation * right_wheel_ground_velocity;
+            println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);*/
+
             let left_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.left_wheel_position.coords;
             let right_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.right_wheel_position.coords;
             println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);
@@ -189,7 +205,7 @@ impl Robot {
         if let Some(blade_handle) = self.blade_handle {
             if let Some(blade) = rigid_body_set.get_mut(blade_handle) {
                 if blade.angvel() < PI as f32 * 2.0 / 60.0 * 10000.0 {
-                    blade.apply_torque_impulse(dt * 50.0, true);
+                    blade.apply_torque_impulse(dt * 1000.0, true);
                 }
             }
         }
@@ -236,6 +252,9 @@ fn main() {
         .build()
         .unwrap();
 
+    let event_settings = EventSettings::new().max_fps(FPS).ups(UPS);
+    let mut events = Events::new(event_settings);
+
     let gravity = Vector2::new(0.0, 0.0); // No gravity in a top-down view
     let integration_parameters = {
         let mut integration_parameters = IntegrationParameters::default();
@@ -256,23 +275,19 @@ fn main() {
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, -5.0), 0.0,
+                35.0, 100.0, 10.0, 11.5, (PI*0.25) as f32, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),
-        /*Robot::new(&mut rigid_body_set, &mut collider_set,
-                35.0, 100.0, 10.0, 11.5, -1.0, Vector2::new(5.0, 0.0), 0.0,
-                InteractionGroups::new(
-                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),*/
-        /*Robot::new(&mut rigid_body_set, &mut collider_set,
+        Robot::new(&mut rigid_body_set, &mut collider_set,
                 150.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(-1.0, 0.0), -0.2,
                 InteractionGroups::new(
                         (GROUP_ENEMY).into(),
-                        (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),*/
+                        (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
     ];
-    /*robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+    robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
             10.0, 2.0, 0.0, point![0.0, 10.0],
             InteractionGroups::new(
-                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));*/
+                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
 
     let arena_walls = vec![
         ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 10.0, 180.0 / 2.0, 5.0 / 2.0),
@@ -284,77 +299,80 @@ fn main() {
 
     let mut counter: u64 = 0;
 
-    while let Some(e) = window.next() {
-        window.draw_2d(&e, |c, g, _| {
-            clear([0.1; 4], g);
+    while let Some(e) = events.next(&mut window) {
+        if e.render_args().is_some() {
+            window.draw_2d(&e, |c, g, _| {
+                clear([0.1; 4], g);
 
-            let transform = c.transform
-                .zoom(2.5)
-                .trans(0.0, 0.0);
-                //.rot_rad(PI)
-                //.trans(-200.0, -200.0);
+                let transform = c.transform
+                    .zoom(2.5)
+                    .trans(0.0, 0.0);
+                    //.rot_rad(PI)
+                    //.trans(-200.0, -200.0);
 
-            /*robots[0].wheel_speed_left = {
-                let mut speed = 30.0;
-                if (counter % 600) >= 300 {
-                    speed = -30.0;
+                // Draw robots and walls
+                for robot in &robots {
+                    robot.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+                }
+
+                for wall in &arena_walls {
+                    wall.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+                }
+
+                // Draw origin dot
+                rectangle([0.8, 0.8, 0.8, 1.0], 
+                          [0.0, 0.0, 5.0, 5.0],
+                          transform
+                            .trans(10.0, 7.0)
+                            .rot_rad(PI * 0.25),
+                          g);
+            });
+        }
+
+        if e.update_args().is_some() {
+            robots[0].wheel_speed_left = {
+                let mut speed = 150.0;
+                if (counter % (UPS * 6)) < (UPS * 3) {
+                    speed = -100.0;
                 }
                 speed
             };
             robots[0].wheel_speed_right = {
-                let mut speed = 30.0;
-                if (counter % 600) >= 300 {
-                    speed = 0.0;
+                let mut speed = 150.0;
+                if (counter % (UPS * 6)) < (UPS * 3) {
+                    speed = -100.0;
                 }
                 speed
-            };*/
+            };
 
-            // Draw robots and walls
-            for robot in &robots {
-                robot.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+            for robot in &mut robots {
+                if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
+                    body.reset_forces(true);
+                    body.reset_torques(true);
+                }
             }
 
-            for wall in &arena_walls {
-                wall.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+            for robot in &mut robots {
+                robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
             }
 
-            // Draw origin dot
-            rectangle([0.8, 0.8, 0.8, 1.0], 
-                      [0.0, 0.0, 5.0, 5.0],
-                      transform
-                        .trans(10.0, 7.0)
-                        .rot_rad(PI * 0.25),
-                      g);
-        });
+            physics_pipeline.step(
+                &gravity,
+                &integration_parameters,
+                &mut island_manager,
+                &mut broad_phase,
+                &mut narrow_phase,
+                &mut rigid_body_set,
+                &mut collider_set,
+                &mut impulse_joint_set,
+                &mut multibody_joint_set,
+                &mut ccd_solver,
+                None,
+                &physics_hooks,
+                &event_handler,
+            );
 
-        for robot in &mut robots {
-            if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
-                body.reset_forces(true);
-                body.reset_torques(true);
-            }
+            counter += 1;
         }
-
-        for robot in &mut robots {
-            robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
-        }
-
-        // Update physics
-        physics_pipeline.step(
-            &gravity,
-            &integration_parameters,
-            &mut island_manager,
-            &mut broad_phase,
-            &mut narrow_phase,
-            &mut rigid_body_set,
-            &mut collider_set,
-            &mut impulse_joint_set,
-            &mut multibody_joint_set,
-            &mut ccd_solver,
-			None,
-			&physics_hooks,
-			&event_handler,
-        );
-
-        counter += 1;
     }
 }
