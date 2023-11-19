@@ -226,6 +226,7 @@ impl Robot {
             let right_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_right);
             //println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
 
+            // TODO: is this correct?
             let left_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.left_wheel_position.coords;
             let right_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.right_wheel_position.coords;
             //println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);
