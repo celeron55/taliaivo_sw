@@ -17,7 +17,7 @@ pub trait RobotInterface {
 
     // Sensor readings
     fn get_weapon_current(&self) -> f32; // Current in Amperes
-    fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32), 6>; // Returns a list of (angle, distance (cm)) tuples for each sensor
+    fn get_proximity_sensors(&self) -> ArrayVec<(f32, Option<f32>), 6>; // Returns a list of (angle (radians), distance (cm)) tuples for each sensor
     fn get_gyroscope_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_battery_cell_voltages(&self, values: &mut[&f32]); // Voltages of individual cells

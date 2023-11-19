@@ -5,9 +5,8 @@ extern crate arrayvec; // Use static arrays like the embedded code
 
 use piston_window::*;
 use rapier2d::prelude::*;
-use nalgebra::{Vector2, Point2};
+use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
-use std::time::Instant;
 use sumobrain_common::{RobotInterface, BrainState};
 use arrayvec::ArrayVec;
 
@@ -28,7 +27,7 @@ struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
     weapon_throttle: f32, // -100 to +100
-    proximity_sensor_readings: ArrayVec<(f32, f32), 6>,
+    proximity_sensor_readings: ArrayVec<(f32, Option<f32>), 6>,
 }
 
 struct ArenaWall {
@@ -61,7 +60,7 @@ impl RobotInterface for Robot {
         return 0.0;
     }
     // Returns a list of (angle, distance (cm)) tuples for each sensor
-    fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32), 6> {
+    fn get_proximity_sensors(&self) -> ArrayVec<(f32, Option<f32>), 6> {
         return self.proximity_sensor_readings.clone();
     }
     // X, Y, Z axis values
@@ -257,14 +256,45 @@ impl Robot {
                 }
             }
         }
+    }
 
-        self.proximity_sensor_readings.clear();
-        self.proximity_sensor_readings.push((  0.0, 20.0));
-        self.proximity_sensor_readings.push((-45.0, 20.0));
-        self.proximity_sensor_readings.push(( 45.0, 20.0));
-        self.proximity_sensor_readings.push((-90.0, 20.0));
-        self.proximity_sensor_readings.push(( 90.0, 20.0));
-        self.proximity_sensor_readings.push((180.0, 20.0));
+    fn update_sensors(&mut self, query_pipeline: &mut QueryPipeline, collider_set: &ColliderSet,
+            rigid_body_set: &RigidBodySet) {
+
+        let position_sensor_angles = [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+        let max_detection_distance: f32 = 40.0;
+
+        if let Some(body) = rigid_body_set.get(self.body_handle) {
+            let robot_orientation = body.position().rotation;
+
+            self.proximity_sensor_readings.clear();
+
+            for angle_deg in position_sensor_angles {
+                let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
+
+                let shape = Ball::new(2.0);
+                let shape_pos: Isometry<Real> = *body.position();
+                let additional_rotation = UnitComplex::new(angle_rad as f32);
+                let rotation = additional_rotation * robot_orientation;
+                let shape_vel: Vector2<f32> = rotation * Vector2::new(0.0, 1.0);
+                let max_toi = max_detection_distance;
+                let stop_at_penetration = true;
+                let filter = QueryFilter::new().groups(InteractionGroups::new(
+                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
+
+                if let Some((handle, hit)) = query_pipeline.cast_shape(
+                    &rigid_body_set, &collider_set, &shape_pos, &shape_vel, &shape, max_toi, stop_at_penetration, filter
+                ) {
+                    // The first collider hit has the handle `handle`. The `hit` is a
+                    // structure containing details about the hit configuration.
+                    //println!("Hit the collider {:?} with the configuration: {:?}", handle, hit);
+
+                    self.proximity_sensor_readings.push((angle_rad as f32, Some(hit.toi)));
+                } else {
+                    self.proximity_sensor_readings.push((angle_rad as f32, None));
+                }
+            }
+		}
     }
 }
 
@@ -326,6 +356,7 @@ fn main() {
     let mut rigid_body_set = RigidBodySet::new();
     let mut collider_set = ColliderSet::new();
     let mut ccd_solver = CCDSolver::new();
+    let mut query_pipeline = QueryPipeline::new();
     let physics_hooks = ();
     let event_handler = ();
 
@@ -399,6 +430,7 @@ fn main() {
 
             for robot in &mut robots {
                 robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
+                robot.update_sensors(&mut query_pipeline, &collider_set, &rigid_body_set);
             }
 
             physics_pipeline.step(
@@ -412,7 +444,7 @@ fn main() {
                 &mut impulse_joint_set,
                 &mut multibody_joint_set,
                 &mut ccd_solver,
-                None,
+                Some(&mut query_pipeline),
                 &physics_hooks,
                 &event_handler,
             );
