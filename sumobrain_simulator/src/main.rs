@@ -315,14 +315,14 @@ fn main() {
 
         if e.update_args().is_some() {
             robots[0].wheel_speed_left = {
-                let mut speed = 150.0;
+                let mut speed = 100.0;
                 if (counter % (UPS * 6)) < (UPS * 3) {
                     speed = -100.0;
                 }
                 speed
             };
             robots[0].wheel_speed_right = {
-                let mut speed = 150.0;
+                let mut speed = 100.0;
                 if (counter % (UPS * 6)) < (UPS * 3) {
                     speed = -100.0;
                 }
