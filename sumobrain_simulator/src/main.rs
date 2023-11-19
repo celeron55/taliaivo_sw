@@ -156,28 +156,12 @@ impl Robot {
             println!("wheel_position_local: L={:?}\tR={:?}", self.left_wheel_position, self.right_wheel_position);
             let left_wheel_position_world = robot_orientation * self.left_wheel_position + body.position().translation.vector;
             let right_wheel_position_world = robot_orientation * self.right_wheel_position + body.position().translation.vector;
-            //let left_wheel_position_world = body.position().translation * self.left_wheel_position;
-            //let right_wheel_position_world = body.position().translation * self.right_wheel_position;
             println!("wheel_position_world: L={:?}\tR={:?}", left_wheel_position_world, right_wheel_position_world);
 
             // Local wheel velocities
             let left_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_left);
             let right_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_right);
             println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
-
-            /*// Calculate tangential velocity at each wheel due to rotation
-            let left_tangential_velocity = Vector2::new(-self.left_wheel_position.y, self.left_wheel_position.x) * robot_angular_velocity;
-            let right_tangential_velocity = Vector2::new(-self.right_wheel_position.y, self.right_wheel_position.x) * robot_angular_velocity;
-
-            // Combine linear and tangential velocities to get
-            // total velocity at each wheel
-            let left_wheel_ground_velocity = robot_velocity + left_tangential_velocity;
-            let right_wheel_ground_velocity = robot_velocity + right_tangential_velocity;
-            println!("wheel_ground_velocity: L={:?}\tR={:?}", left_wheel_ground_velocity, right_wheel_ground_velocity);
-
-            let left_wheel_ground_velocity_local = robot_orientation * left_wheel_ground_velocity;
-            let right_wheel_ground_velocity_local = robot_orientation * right_wheel_ground_velocity;
-            println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);*/
 
             let left_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.left_wheel_position.coords;
             let right_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.right_wheel_position.coords;
