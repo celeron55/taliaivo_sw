@@ -410,6 +410,8 @@ impl BrainState {
         // - The enemy can be against a wall
         // - The age of information about the enemy can vary
 
+        //let score_requirement = 3.4;
+        let score_requirement = 3.0;
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -433,7 +435,7 @@ impl BrainState {
         if let Some(result) = result_maybe {
             let score = result.2;
             println!("score: {:?}", score);
-            if score < 3.4 {
+            if score < score_requirement {
                 // Target the center of the pattern
                 let target_p = Point2::new(
                     (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
@@ -481,8 +483,8 @@ impl BrainState {
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
-            // Apply very strong motor speed modulation to get scanning data
-            //wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 7.0).sin() * 2.0;
+            // Apply motor speed modulation to get scanning data
+            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
             if self.proximity_sensor_readings.len() >= 6 {
                 let d0 = self.proximity_sensor_readings[0].1;
                 let d1 = self.proximity_sensor_readings[1].1;
@@ -515,8 +517,9 @@ impl BrainState {
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
                         target_p, max_linear_speed, max_rotation_speed);
-        // Apply some motor speed modulation to get scanning data
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 4.0).sin() * 1.0;
+        // Apply some motor speed modulation to get scanning data to help stay
+        // on target
+        //wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
         // Revert linear speed at an interval to allow the weapon to spin up
         if self.counter > UPS * 2 && ((self.counter + self.seed as u64) % (UPS * 4)) < (UPS * 1) {
             wanted_linear_speed *= -1.0;
