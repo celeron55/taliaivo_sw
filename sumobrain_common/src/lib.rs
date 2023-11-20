@@ -244,24 +244,13 @@ impl BrainState {
         self.pos.x += self.vel.x / UPS as f32;
         self.pos.y += self.vel.y / UPS as f32;
 
-        let mut wanted_linear_speed = 0.0;
-        let mut wanted_rotation_speed = 0.0;
-
-        let s = 60.0;
-        let dur = 6;
-        if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
-            wanted_linear_speed = -s;
-        } else {
-            wanted_linear_speed = s;
-        }
-
         let proximity_sensor_readings = robot.get_proximity_sensors();
 
         //println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
 
         self.map.global_forget(0.998);
 
-        if gyro_z.abs() > 5.0 {
+        if gyro_z.abs() > PI * 2.5 {
             self.map.global_forget(0.9);
         }
 
@@ -271,6 +260,19 @@ impl BrainState {
 
         robot.report_map(&self.map, self.pos, self.rot);
 
+        let mut wanted_linear_speed = 0.0;
+        let mut wanted_rotation_speed = 0.0;
+
+        // TODO: Remove
+        let s = 60.0;
+        let dur = 6;
+        if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
+            wanted_linear_speed = -s;
+        } else {
+            wanted_linear_speed = s;
+        }
+
+        // TODO: Remove
         if proximity_sensor_readings.len() >= 6 {
             let d0 = proximity_sensor_readings[0].1;
             let d1 = proximity_sensor_readings[1].1;
@@ -303,10 +305,9 @@ impl BrainState {
             }
         }
 
-        // Modulate motor speeds a bit to generate better sensor data
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+        (wanted_linear_speed, wanted_rotation_speed) = self.create_motion();
 
-        // TODO: Remove or replace
+        /*// TODO: Remove or replace
         let wanted_absolute_angle = PI * 0.5;
         let max_rotation_speed = PI * 3.0;
         let max_linear_speed = 30.0;
@@ -314,7 +315,7 @@ impl BrainState {
         //wanted_rotation_speed = self.steer_towards_absolute_angle(
         //        wanted_absolute_angle, max_rotation_speed);
         (wanted_linear_speed, wanted_rotation_speed) = self.drive_towards_absolute_position(
-                target_p, max_linear_speed, max_rotation_speed);
+                target_p, max_linear_speed, max_rotation_speed);*/
 
         let track = robot.get_track_width();
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
@@ -337,8 +338,50 @@ impl BrainState {
         self.counter += 1;
     }
 
+    pub fn create_motion(&self) -> (f32, f32) {
+        return self.create_scanning_motion();
+        //return self.create_safety_motion();
+        //return self.create_attack_motion();
+    }
+
+    pub fn create_scanning_motion(&self) -> (f32, f32) {
+        // TODO: Try to still avoid walls
+        let wanted_linear_speed = 50.0;
+        let wanted_rotation_speed = PI * 2.0;
+        return (wanted_linear_speed, wanted_rotation_speed);
+    }
+
+    pub fn create_safety_motion(&self) -> (f32, f32) {
+        // TODO: Try to avoid walls
+        let max_linear_speed = 100.0;
+        let max_rotation_speed = PI * 2.0;
+        // TODO: Find a good target_p on map
+        let target_p = Point2::new(100.0, 100.0);
+        let (mut wanted_linear_speed, mut wanted_rotation_speed) =
+                self.drive_towards_absolute_position(
+                    target_p, max_linear_speed, max_rotation_speed);
+        // Modulate motor speeds a bit to generate better sensor data
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+        return (wanted_linear_speed, wanted_rotation_speed);
+    }
+
+    pub fn create_attack_motion(&self) -> (f32, f32) {
+        // TODO: Try to avoid walls
+        let max_linear_speed = 50.0;
+        let max_rotation_speed = PI * 3.0;
+        // TODO: Find a good target_p on map
+        let target_p = Point2::new(100.0, 100.0);
+        let (mut wanted_linear_speed, mut wanted_rotation_speed) =
+                self.drive_towards_absolute_position(
+                    target_p, max_linear_speed, max_rotation_speed);
+        // Modulate motor speeds a bit to generate better sensor data
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+        return (wanted_linear_speed, wanted_rotation_speed);
+    }
+
     // Returns a value suitable for wanted_rotation_speed
-    pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32, max_rotation_speed: f32) -> f32 {
+    pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32,
+            max_rotation_speed: f32) -> f32 {
         let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
         //println!("angle_diff: {:?}", angle_diff);
         let speed_factor = 0.1 + (angle_diff.abs() / PI * 0.9);
