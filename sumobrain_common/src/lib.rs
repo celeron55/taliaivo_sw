@@ -165,12 +165,28 @@ impl Map {
     }
 }
 
+fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
+    if target_value > previous_value {
+        if previous_value + max_change > target_value {
+            return target_value;
+        }
+        return previous_value + max_change;
+    } else {
+        if previous_value - max_change < target_value {
+            return target_value;
+        }
+        return previous_value - max_change;
+    }
+}
+
 pub struct BrainState {
     counter: u64,
     map: Map,
     pos: Point2<f32>, // Position of robot on map
     rot: f32, // Angle of robot on map (radians)
     vel: Vector2<f32>, // Velocity of robot on map
+    applied_wheel_speed_left: f32,
+    applied_wheel_speed_right: f32,
 }
 
 impl BrainState {
@@ -181,6 +197,8 @@ impl BrainState {
             pos: Point2::new(100.0, 100.0),
             rot: 0.0,
             vel: Vector2::new(0.0, 0.0),
+            applied_wheel_speed_left: 0.0,
+            applied_wheel_speed_right: 0.0,
         }
     }
 
@@ -203,6 +221,25 @@ impl BrainState {
 
         let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
         println!("gyro_z: {:?}", gyro_z);
+
+        // TODO: Make sure this is scaled appropriately
+        self.rot += gyro_z / UPS as f32;
+
+        // TODO: If gyro_z doesn't match rotation caused by wheel speeds, assume
+        // a wheel is not touching the ground and act differently
+
+        // TODO: Maintain self.rot via motor speeds
+
+        // TODO: Maintain self.vel via accelerometer and self.rot
+
+        // TODO: Maintain self.vel via motor speeds and self.rot
+        let avg_wheel_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
+        self.vel.x = avg_wheel_speed * self.rot.cos();
+        self.vel.y = avg_wheel_speed * self.rot.sin();
+
+        // TODO: Maintain self.pos via self.vel
+        self.pos.x += self.vel.x / UPS as f32;
+        self.pos.y += self.vel.y / UPS as f32;
 
         let s = 60.0;
         let dur = 6;
@@ -269,38 +306,23 @@ impl BrainState {
             }
         }
 
-        // TODO: Limit wheel speed changes, i.e. limit acceleration
-
         // Modulate motor speeds a bit to generate better sensor data
         wheel_speed_left += (self.counter as f32 / UPS as f32 * 10.0).sin() * 5.0;
         wheel_speed_right += (self.counter as f32 / UPS as f32 * 10.0 + PI).sin() * 5.0;
 
-        robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+        // Limit wheel speed changes, i.e. limit acceleration
+        self.applied_wheel_speed_left = limit_acceleration(self.applied_wheel_speed_left,
+                wheel_speed_left, 250.0 / UPS as f32);
+        self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
+                wheel_speed_right, 250.0 / UPS as f32);
+
+        robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 
         let mut weapon_throttle = 100.0;
         if gyro_z.abs() > 5.0 {
             weapon_throttle = 0.0;
         }
         robot.set_weapon_throttle(weapon_throttle);
-
-        // TODO: Make sure this is scaled appropriately
-        self.rot += gyro_z / UPS as f32;
-
-        // TODO: If gyro_z doesn't match rotation caused by wheel speeds, assume
-        // a wheel is not touching the ground and act differently
-
-        // TODO: Maintain self.rot via motor speeds
-
-        // TODO: Maintain self.vel via accelerometer and self.rot
-
-        // TODO: Maintain self.vel via motor speeds and self.rot
-        let avg_wheel_speed = (wheel_speed_left + wheel_speed_right) / 2.0;
-        self.vel.x = avg_wheel_speed * self.rot.cos();
-        self.vel.y = avg_wheel_speed * self.rot.sin();
-
-        // TODO: Maintain self.pos via self.vel
-        self.pos.x += self.vel.x / UPS as f32;
-        self.pos.y += self.vel.y / UPS as f32;
 
         self.counter += 1;
     }
