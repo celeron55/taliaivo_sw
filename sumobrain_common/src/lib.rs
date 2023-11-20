@@ -209,6 +209,59 @@ impl Map {
 
         score
     }
+
+    pub fn find_binary_pattern(&self, pattern: &[bool], pattern_width: u32, pattern_height: u32,
+            ignore_map_below_significance: f32, score_for_ignore: f32,
+            weights: Option<&[f32]>)
+            -> Option<(u32, u32, f32)> {
+        let mut best_match = None;
+        let mut best_score = f32::MAX;
+
+        for y in 0..self.height.saturating_sub(pattern_height) {
+            for x in 0..self.width.saturating_sub(pattern_width) {
+                let score = self.calculate_binary_match_score(
+                        x, y, pattern, pattern_width, pattern_height,
+                        ignore_map_below_significance, score_for_ignore, weights);
+                if score < best_score {
+                    best_score = score;
+                    best_match = Some((x, y, score));
+                }
+            }
+        }
+
+        best_match
+    }
+
+    fn calculate_binary_match_score(&self, x: u32, y: u32, pattern: &[bool], pattern_width: u32,
+            pattern_height: u32, ignore_map_below_significance: f32, score_for_ignore: f32,
+            weights: Option<&[f32]>) -> f32 {
+        let mut score = 0.0;
+
+        for pattern_y in 0..pattern_height {
+            for pattern_x in 0..pattern_width {
+                let map_x = x + pattern_x;
+                let map_y = y + pattern_y;
+                let map_idx = (map_y * self.width + map_x) as usize;
+                let pattern_idx = (pattern_y * pattern_width + pattern_x) as usize;
+                let mut weight = 1.0;
+                if let Some(weights_) = weights {
+                    weight = weights_[pattern_idx];
+                }
+
+                if self.data[map_idx].abs() >= ignore_map_below_significance {
+                    if pattern[pattern_idx] && self.data[map_idx] < 0.0 {
+                        score += weight;
+                    } else if !pattern[pattern_idx] && self.data[map_idx] > 0.0 {
+                        score += weight;
+                    }
+                } else {
+                    score += score_for_ignore * weight;
+                }
+            }
+        }
+
+        score
+    }
 }
 
 fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
@@ -299,7 +352,7 @@ impl BrainState {
 
         self.map.global_forget(0.998);
 
-        if gyro_z.abs() > PI * 2.5 {
+        if gyro_z.abs() > PI * 5.0 {
             self.map.global_forget(0.9);
         }
 
@@ -327,10 +380,10 @@ impl BrainState {
         // Rotation has to be prioritized, thus if the wanted wheel speed
         // difference wasn't applied, force it, ignoring acceleration
         // TODO: Rethink this
-        let avg_applied_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
+        /*let avg_applied_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
         let wanted_difference = wanted_wheel_speed_left - wanted_wheel_speed_right;
         self.applied_wheel_speed_left = avg_applied_speed + wanted_difference / 2.0;
-        self.applied_wheel_speed_right = avg_applied_speed - wanted_difference / 2.0;
+        self.applied_wheel_speed_right = avg_applied_speed - wanted_difference / 2.0;*/
 
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 
@@ -363,7 +416,7 @@ impl BrainState {
             -100.0,  100.0,  100.0, -100.0,
             -100.0, -100.0, -100.0, -100.0,
         ];*/
-        let pattern_w: u32 = 6;
+        /*let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
             -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
@@ -372,12 +425,31 @@ impl BrainState {
             -100.0, -100.0,  100.0,  100.0, -100.0, -100.0,
             -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
             -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
+        ];*/
+        let pattern_w: u32 = 6;
+        let pattern_h: u32 = 6;
+        let pattern = [
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
+            false, false, true , true , false, false,
+            false, false, true , true , false, false,
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
         ];
-        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 30.0, 50.0);
+        let weights = [
+            0.1, 0.2, 0.2, 0.2, 0.2, 0.1,
+            0.2, 0.8, 0.8, 0.8, 0.8, 0.2,
+            0.2, 0.8, 1.0, 1.0, 0.8, 0.2,
+            0.2, 0.8, 1.0, 1.0, 0.8, 0.2,
+            0.2, 0.8, 0.8, 0.8, 0.8, 0.2,
+            0.1, 0.2, 0.2, 0.2, 0.2, 0.1,
+        ];
+        let result_maybe = self.map.find_binary_pattern(
+                &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights));
         if let Some(result) = result_maybe {
             let score = result.2;
             println!("score: {:?}", score);
-            if score < 20.0 * pattern_w as f32 * pattern_h as f32 {
+            if score < 3.4 {
                 // Target the center of the pattern
                 let target_p = Point2::new(
                     (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
@@ -450,15 +522,18 @@ impl BrainState {
     pub fn create_attack_motion(&mut self, target_p: Point2<f32>) -> (f32, f32) {
         self.attack_p = Some(target_p);
         // Drive towards target
-        let max_linear_speed = 200.0;
-        let max_rotation_speed = PI * 4.0;
+        // TODO: Make it so that a higher speed like this is controllable
+        /*let max_linear_speed = 200.0;
+        let max_rotation_speed = PI * 4.0;*/
+        let max_linear_speed = 100.0;
+        let max_rotation_speed = PI * 2.0;
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
                         target_p, max_linear_speed, max_rotation_speed);
         // Apply some motor speed modulation to get scanning data
         wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 4.0).sin() * 1.0;
         // Revert linear speed at an interval to allow the weapon to spin up
-        if (self.counter % (UPS * 4)) < (UPS * 1) {
+        if self.counter > UPS * 2 && (self.counter % (UPS * 4)) < (UPS * 1) {
             wanted_linear_speed *= -1.0;
         }
         return (wanted_linear_speed, wanted_rotation_speed);
@@ -478,12 +553,14 @@ impl BrainState {
     }
 
     // Returns a value suitable for wanted_linear_speed and wanted_rotation_speed
+    // Prioritizes steering first, then picks up speed
     pub fn drive_towards_absolute_position(&self, target_p: Point2<f32>,
             max_linear_speed: f32, max_rotation_speed: f32) -> (f32, f32) {
         let u = target_p - self.pos;
         let heading = Rotation2::rotation_between(&Vector2::x(), &u);
         let target_angle_rad = heading.angle();
-        let speed_factor = (u.magnitude() / 20.0).clamp(0.0, 1.0);
+        let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
+        let speed_factor = (u.magnitude() / 20.0 - angle_diff / PI * 2.0).clamp(0.0, 1.0);
         let wanted_linear_speed = max_linear_speed * speed_factor;
         let wanted_rotation_speed = self.steer_towards_absolute_angle(
                 target_angle_rad, max_rotation_speed);

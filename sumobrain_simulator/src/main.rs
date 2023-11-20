@@ -13,6 +13,8 @@ use arrayvec::ArrayVec;
 
 const FPS: u64 = 120;
 const UPS: u64 = sumobrain_common::UPS;
+const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
+//const PLAY_UPS: u64 = 20; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
 const GROUP_EGO: u32 = 0b0001;
@@ -438,7 +440,7 @@ fn main() {
         .build()
         .unwrap();
 
-    let event_settings = EventSettings::new().max_fps(FPS).ups(UPS);
+    let event_settings = EventSettings::new().max_fps(FPS).ups(PLAY_UPS);
     let mut events = Events::new(event_settings);
 
     let gravity = Vector2::new(0.0, 0.0); // No gravity in a top-down view
@@ -521,14 +523,14 @@ fn main() {
                           g);
 
                 robots[0].draw_map(&c, g, &transform, 2.5);
-                let transform2 = transform.trans(0.0, 110.0);
+                let transform2 = transform.trans(0.0, 120.0);
                 robots[1].draw_map(&c, g, &transform2, 1.0);
             });
         }
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            brain2.update(&mut robots[1]);
+            //brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
