@@ -1,5 +1,4 @@
 extern crate piston_window;
-                // TODO
 extern crate rapier2d;
 extern crate sumobrain_common;
 extern crate arrayvec; // Use static arrays like the embedded code
