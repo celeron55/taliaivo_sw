@@ -31,7 +31,8 @@ pub trait RobotInterface {
     fn set_led_status(&mut self, status: bool);
 
     // Diagnostic data
-    fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32);
+    fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32,
+            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>);
 }
 
 pub const UPS: u64 = 100; // Updates per second
@@ -233,6 +234,8 @@ pub struct BrainState {
     applied_wheel_speed_left: f32,
     applied_wheel_speed_right: f32,
     proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
+    attack_p: Option<Point2<f32>>, // For diagnostics
+    scan_p: Option<Point2<f32>>, // For diagnostics
 }
 
 impl BrainState {
@@ -246,6 +249,8 @@ impl BrainState {
             applied_wheel_speed_left: 0.0,
             applied_wheel_speed_right: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
+            attack_p: None,
+            scan_p: None,
         }
     }
 
@@ -302,7 +307,7 @@ impl BrainState {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
-        robot.report_map(&self.map, self.pos, self.rot);
+        robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p);
 
         let mut wanted_linear_speed = 0.0;
         let mut wanted_rotation_speed = 0.0;
@@ -382,21 +387,35 @@ impl BrainState {
         self.counter += 1;
     }
 
-    pub fn create_motion(&self) -> (f32, f32) {
+    pub fn create_motion(&mut self) -> (f32, f32) {
+        // Reset diagnostic values
+        self.attack_p = None;
+        self.scan_p = None;
+
         // See if the enemy can be reasonably found on the map
-        let pattern_w: u32 = 4;
+        /*let pattern_w: u32 = 4;
         let pattern_h: u32 = 4;
         let pattern = [
             -100.0, -100.0, -100.0, -100.0,
             -100.0,  100.0,  100.0, -100.0,
             -100.0,  100.0,  100.0, -100.0,
             -100.0, -100.0, -100.0, -100.0,
+        ];*/
+        let pattern_w: u32 = 6;
+        let pattern_h: u32 = 6;
+        let pattern = [
+            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
+            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
+            -100.0, -100.0,  100.0,  100.0, -100.0, -100.0,
+            -100.0, -100.0,  100.0,  100.0, -100.0, -100.0,
+            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
+            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
         ];
         let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 30.0, 50.0);
         if let Some(result) = result_maybe {
             let score = result.2;
             println!("score: {:?}", score);
-            if score < 25.0 * pattern_w as f32 * pattern_h as f32 {
+            if score < 20.0 * pattern_w as f32 * pattern_h as f32 {
                 // Target the center of the pattern
                 let target_p = Point2::new(
                     (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
@@ -410,28 +429,27 @@ impl BrainState {
 
         println!("scan");
         return self.create_scanning_motion();
-        //return self.create_safety_motion();
-        //return self.create_attack_motion();
     }
 
-    pub fn create_scanning_motion(&self) -> (f32, f32) {
+    pub fn create_scanning_motion(&mut self) -> (f32, f32) {
+        let max_linear_speed = 50.0;
+        let max_rotation_speed = PI * 2.0;
         // Find a good spot on the map to investigate
         // TODO: Somehow fill in the behinds of walls on the map in such a way
         //       that the robot doesn't see them as places where it can go, or
         //       in some other way make it so that the robot doesn't try to
         //       drive through walls
-        let pattern_w: u32 = 7;
-        let pattern_h: u32 = 7;
+        let pattern_w: u32 = 6;
+        let pattern_h: u32 = 6;
         let pattern = [
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
-            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
         ];
-        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 0.0, 0.0);
+        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 5.0, 30.0);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
@@ -439,14 +457,13 @@ impl BrainState {
                 (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
             );
             //println!("target_p: {:?}", target_p);
+            self.scan_p = Some(target_p);
             // Drive towards that spot
-            let max_linear_speed = 50.0;
-            let max_rotation_speed = PI * 2.0;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
             // Apply very strong motor speed modulation to get scanning data
-            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 7.0).sin() * 2.0;
+            //wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 7.0).sin() * 2.0;
             return (wanted_linear_speed, wanted_rotation_speed);
         }
         let wanted_linear_speed = 100.0;
@@ -454,21 +471,8 @@ impl BrainState {
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
-    pub fn create_safety_motion(&self) -> (f32, f32) {
-        // TODO: Try to avoid walls
-        let max_linear_speed = 50.0;
-        let max_rotation_speed = PI * 2.0;
-        // TODO: Find a good target_p on map
-        let target_p = Point2::new(100.0, 100.0);
-        let (mut wanted_linear_speed, mut wanted_rotation_speed) =
-                self.drive_towards_absolute_position(
-                    target_p, max_linear_speed, max_rotation_speed);
-        // Modulate motor speeds a bit to generate better sensor data
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
-        return (wanted_linear_speed, wanted_rotation_speed);
-    }
-
-    pub fn create_attack_motion(&self, target_p: Point2<f32>) -> (f32, f32) {
+    pub fn create_attack_motion(&mut self, target_p: Point2<f32>) -> (f32, f32) {
+        self.attack_p = Some(target_p);
         // Drive towards target
         let max_linear_speed = 100.0;
         let max_rotation_speed = PI * 4.0;

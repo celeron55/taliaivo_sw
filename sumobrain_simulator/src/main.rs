@@ -33,6 +33,8 @@ struct Robot {
     diagnostic_map: Map,
     diagnostic_robot_p: Point2<f32>,
     diagnostic_robot_r: f32,
+    diagnostic_attack_p: Option<Point2<f32>>,
+    diagnostic_scan_p: Option<Point2<f32>>,
 }
 
 struct ArenaWall {
@@ -93,10 +95,13 @@ impl RobotInterface for Robot {
     }
 
     // Diagnostic data
-    fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32) {
+    fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32,
+            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>) {
         self.diagnostic_map = map.clone();
         self.diagnostic_robot_p = robot_p;
         self.diagnostic_robot_r = robot_r;
+        self.diagnostic_attack_p = attack_p;
+        self.diagnostic_scan_p = scan_p;
     }
 }
 
@@ -129,6 +134,8 @@ impl Robot {
             diagnostic_map: Map::new(),
             diagnostic_robot_p: Point2::new(0.0, 0.0),
             diagnostic_robot_r: 0.0,
+            diagnostic_attack_p: None,
+            diagnostic_scan_p: None,
         }
     }
 
@@ -351,6 +358,7 @@ impl Robot {
                     g);
             }
         }
+
         let p = self.diagnostic_robot_p;
         let r = self.diagnostic_robot_r;
         /*rectangle([0.2, 0.8, 0.8, 1.0],
@@ -373,6 +381,27 @@ impl Robot {
                             tile_size * p.y as f64 / map.tile_wh as f64)
                     .rot_rad(r as f64),
                 g);
+
+        if let Some(p) = self.diagnostic_attack_p {
+            rectangle([0.8, 0.2, 0.2, 1.0],
+                    [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
+                    transform
+                        .trans(200.0, 10.0)
+                        .trans(tile_size * p.x as f64 / map.tile_wh as f64,
+                                tile_size * p.y as f64 / map.tile_wh as f64)
+                        .rot_rad(r as f64),
+                    g);
+        }
+        if let Some(p) = self.diagnostic_scan_p {
+            rectangle([0.2, 0.8, 0.2, 1.0],
+                    [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
+                    transform
+                        .trans(200.0, 10.0)
+                        .trans(tile_size * p.x as f64 / map.tile_wh as f64,
+                                tile_size * p.y as f64 / map.tile_wh as f64)
+                        .rot_rad(r as f64),
+                    g);
+        }
     }
 }
 
