@@ -5,6 +5,7 @@ extern crate arrayvec; // Use static arrays like the embedded code
 use arrayvec::ArrayVec;
 use libc_print::std_name::{println, eprintln, print, dbg};
 use nalgebra::{Vector2, Point2, UnitComplex};
+use core::f32::consts::PI;
 
 pub trait RobotInterface {
     // Motor control
@@ -51,7 +52,7 @@ impl Map {
         let mut data = ArrayVec::new();
         // TODO: Figure out something better for filling the map (note: fill()
         // doesn't work)
-        for i in 0..MAP_SIZE {
+        for _ in 0..MAP_SIZE {
             data.push(0.0);
         }
         Map {
@@ -113,12 +114,40 @@ impl Map {
         }
     }
 
-    pub fn print(&self) {
+    pub fn translate(&mut self, dx: i32, dy: i32) {
+        let mut new_data = ArrayVec::<f32, MAP_SIZE>::new();
+        // TODO: Figure out something better for filling the map (note: fill()
+        // doesn't work)
+        for _ in 0..MAP_SIZE {
+            new_data.push(0.0);
+        }
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let new_x = x as i32 + dx;
+                let new_y = y as i32 + dy;
+
+                if new_x >= 0 && new_x < self.width as i32 && new_y >= 0 && new_y < self.height as i32 {
+                    let old_idx = (y * self.width + x) as usize;
+                    let new_idx = (new_y as u32 * self.width + new_x as u32) as usize;
+                    new_data[new_idx] = self.data[old_idx];
+                }
+            }
+        }
+
+        self.data = new_data;
+    }
+
+    pub fn print(&self, robot_pos: Point2<f32>) {
+        let robot_x = (robot_pos.x / self.tile_wh).round() as u32;
+        let robot_y = (robot_pos.y / self.tile_wh).round() as u32;
         for y in 0..self.height {
             for x in 0..self.width {
                 let idx = (y * self.width + x) as usize;
                 let tile_value = self.data[idx];
-                let symbol = if tile_value < -50.0 {
+                let symbol = if robot_x == x && robot_y == y {
+                    "R"
+                } else if tile_value < -50.0 {
                     " "
                 } else if tile_value < -10.0 {
                     "."
@@ -159,28 +188,34 @@ impl BrainState {
     pub fn update(&mut self, robot: &mut dyn RobotInterface) {
         // Move robot closer to the center of map if it's near an edge
         let edge = 20.0;
-        if (self.pos.x - MAP_W_REAL / 2.0).abs() > MAP_W_REAL / 2.0 ||
-                (self.pos.y - MAP_H_REAL / 2.0).abs() > MAP_H_REAL / 2.0 {
-            self.pos.x = MAP_W_REAL / 2.0;
-            self.pos.y = MAP_H_REAL / 2.0;
-            // TODO: Transform the map when moving the robot closer to the center of
-            // the map so that the map hopefully somewhat matches the surroundings
+        if (self.pos.x - MAP_W_REAL / 2.0).abs() > MAP_W_REAL / 4.0 ||
+                (self.pos.y - MAP_H_REAL / 2.0).abs() > MAP_H_REAL / 4.0 {
+            let ideal_translate = Point2::new(MAP_W_REAL/2.0, MAP_H_REAL/2.0) - self.pos;
+            let dx_tiles = (ideal_translate.x / self.map.tile_wh).round() as i32;
+            let dy_tiles = (ideal_translate.y / self.map.tile_wh).round() as i32;
+            let final_translate = Vector2::new(dx_tiles as f32 * self.map.tile_wh, dy_tiles as f32 * self.map.tile_wh);
+            self.pos += final_translate;
+            // Transform the map when moving the robot closer to the center of
+            // the map so that the map hopefully somewhat matches the
+            // surroundings
+            self.map.translate(dx_tiles, dy_tiles);
         }
 
         let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
         println!("gyro_z: {:?}", gyro_z);
 
-        let s = 15.0;
+        let s = 30.0;
+        let dur = 10;
         let mut wheel_speed_left = {
             let mut speed = s;
-            if (self.counter % (UPS * 10)) < (UPS * 5) {
+            if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
                 speed = -s;
             }
             speed
         };
         let mut wheel_speed_right = {
             let mut speed = s;
-            if (self.counter % (UPS * 10)) < (UPS * 5) {
+            if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
                 speed = -s;
             }
             speed
@@ -190,13 +225,36 @@ impl BrainState {
 
         println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
 
-        self.map.global_forget(0.999);
+        self.map.global_forget(0.998);
 
         for reading in &proximity_sensor_readings {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
-        self.map.print();
+        self.map.print(self.pos);
+
+        // Assume the first 3 sensors are pointing somewhat forward and if they
+        // all are showing short distance, don't try to push further
+        // TODO: Make an exception when it has been determined that we are
+        // pushing against the opponent instead of a wall
+        if proximity_sensor_readings.len() > 2 {
+            let d0 = proximity_sensor_readings[0].1;
+            let d1 = proximity_sensor_readings[1].1;
+            let d2 = proximity_sensor_readings[2].1;
+            if d0 < 10.0 && d1 < 15.0 && d2 < 15.0 {
+                wheel_speed_left = -10.0;
+                wheel_speed_right = -5.0;
+            }
+        }
+        // Assume sensor [5] is pointing rearwards. Don't try to reverse more if
+        // it's detecting something.
+        if proximity_sensor_readings.len() > 5 {
+            let d5 = proximity_sensor_readings[5].1;
+            if d5 < 10.0 {
+                wheel_speed_left = 5.0;
+                wheel_speed_right = 5.0;
+            }
+        }
 
         /*if proximity_sensor_readings.len() >= 6 {
             {
@@ -216,6 +274,10 @@ impl BrainState {
         }*/
 
         // TODO: Limit wheel speed changes, i.e. limit acceleration
+
+        // Modulate motor speeds a bit to generate better sensor data
+        wheel_speed_left += (self.counter as f32 / UPS as f32 * 10.0).sin() * 5.0;
+        wheel_speed_right += (self.counter as f32 / UPS as f32 * 10.0 + PI).sin() * 5.0;
 
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
 
