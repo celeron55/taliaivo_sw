@@ -396,17 +396,20 @@ impl Robot {
                     g);
         }
 
-        for line in &self.diagnostic_lines {
-            let angle_rad = line.angle.to_radians();
-            let line_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
-            let line_point = line_direction * line.distance * self.diagnostic_map.tile_wh;
+        //self.diagnostic_map.print(Point2::new(0.0, 0.0));
+
+        for (i, line) in self.diagnostic_lines.iter().enumerate() {
+            let angle_rad = ((line.angle) as f32).to_radians();
+            // Direction of the line normal
+            let normal_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
+            let line_point = normal_direction * line.distance;
             let p = line_point;
-            // TODO
+            // TODO: Draw as an actual line somehow reasonably
             rectangle([0.8, 0.8, 0.2, 1.0],
-                    [-tile_size*2.5, -tile_size*0.25, tile_size*5.0, tile_size*0.5],
+                    [-tile_size*0.2, -tile_size*50.0, tile_size*0.4, tile_size*100.0],
                     transform
-                        .trans(tile_size * p.x as f64 / map.tile_wh as f64,
-                                tile_size * p.y as f64 / map.tile_wh as f64)
+                        .trans(tile_size * p.x as f64,
+                                tile_size * p.y as f64)
                         .rot_rad(angle_rad as f64),
                     g);
         }
@@ -545,14 +548,14 @@ fn main() {
 
                 let transform1 = transform.trans(180.0, 10.0);
                 robots[0].draw_map(&c, g, &transform1, 2.2);
-                let transform2 = transform1.trans(0.0, 100.0);
-                robots[1].draw_map(&c, g, &transform2, 0.75);
+                //let transform2 = transform1.trans(0.0, 100.0);
+                //robots[1].draw_map(&c, g, &transform2, 0.75);
             });
         }
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            //brain2.update(&mut robots[1]);
+            brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {

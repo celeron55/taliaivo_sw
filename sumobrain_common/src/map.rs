@@ -235,9 +235,12 @@ const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = (MAX_DISTANCE - MIN_DISTANCE) as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
+const HOUGH_THRESHOLD: usize = 12;
 const MAX_NUM_LINE_CANDIDATES: usize = 100;
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
 const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
+const EDGE_MIN_POS: f32 = 40.0;
+const EDGE_MAX_NEG: f32 = -20.0;
 
 type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
 
@@ -290,8 +293,8 @@ impl Map {
                         let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()) as f32;
                         if (distance as i32) >= MIN_DISTANCE && (distance as i32) < MAX_DISTANCE {
                             let distance_index = (distance as i32 - MIN_DISTANCE) as usize / DISTANCE_STEP;
-                            println!("x: {:?}, y: {:?}, distance: {:?}, angle: {:?} -> angle_index: {:?}, distance_index: {:?}",
-                                    x, y, distance, angle, angle_index, distance_index);
+                           /* println!("x: {:?}, y: {:?}, distance: {:?}, angle: {:?} -> angle_index: {:?}, distance_index: {:?}",
+                                    x, y, distance, angle, angle_index, distance_index);*/
                             accumulator[angle_index][distance_index] += 1;
                         }
                     }
@@ -308,7 +311,7 @@ impl Map {
         // (i.e. it must be the inside of a solid wall). If it is not, we
         // discard the position immediately.
         let i0 = (y * self.width + x) as usize;
-        if self.data[i0] < 50.0 {
+        if self.data[i0] < EDGE_MIN_POS {
             return false;
         }
         // For us to consider the position an edge, it must have a neighbor with
@@ -326,7 +329,7 @@ impl Map {
                 continue;
             }
             let i1 = (y1 as u32 * self.width + x1 as u32) as usize;
-            if self.data[i1] < -50.0 {
+            if self.data[i1] < -EDGE_MAX_NEG {
                 return true;
             }
         }
@@ -334,9 +337,6 @@ impl Map {
     }
 
     pub fn detect_lines(&self, accumulator: &Accumulator) -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
-        // TODO: Adjust
-        const THRESHOLD: usize = 6;
-
         let mut line_candidates: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> =
                 ArrayVec::new();
 
@@ -344,24 +344,26 @@ impl Map {
         for (angle_index, distances) in accumulator.iter().enumerate() {
             for (distance_index, &votes) in distances.iter().enumerate() {
                 //println!("votes: {:?}", votes);
-                if votes as usize >= THRESHOLD { // THRESHOLD is a predefined constant
-                    // TODO: Maybe care about the result of the try_push
+                if votes as usize >= HOUGH_THRESHOLD {
                     let angle = angle_index as f32 * ANGLE_STEP as f32;
-                    let distance = distance_index as f32 * DISTANCE_STEP as f32 + MIN_DISTANCE as f32;
+                    let distance = distance_index as f32 * DISTANCE_STEP as f32 + MIN_DISTANCE as f32 + DISTANCE_STEP as f32 / 2.0;
+                    // TODO: Maybe care about the result of the try_push
                     line_candidates.try_push(HoughLine::new(angle, distance, votes.into()));
                 }
             }
         }
 
+        // TODO: Make this work?
         //line_candidates = self.merge_similar_lines(line_candidates);
 
         // Sort by votes and select top lines
         line_candidates.sort_by(|a, b| b.votes.cmp(&a.votes)); // Sort in descending order of votes
-        //line_candidates.truncate(4); // Keep only the top 4 lines
+        line_candidates.truncate(10); // Keep only the top lines
 
         return line_candidates;
     }
 
+    // TODO: Fix this?
     fn merge_similar_lines(&self, lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>)
             -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
         let mut merged_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
