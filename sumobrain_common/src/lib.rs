@@ -35,7 +35,7 @@ pub trait RobotInterface {
             attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>);
 }
 
-pub const UPS: u64 = 100; // Updates per second
+pub const UPS: u32 = 100; // Updates per second
 const MAP_T: f32 = 5.0; // Map tile width and height in cm
 const MAP_W_REAL: f32 = 200.0; // Map width in cm
 const MAP_H_REAL: f32 = MAP_W_REAL;
@@ -290,6 +290,7 @@ pub struct BrainState {
     proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
     attack_p: Option<Point2<f32>>, // For diagnostics
     scan_p: Option<Point2<f32>>, // For diagnostics
+    attack_step_count: u32,
 }
 
 impl BrainState {
@@ -306,6 +307,7 @@ impl BrainState {
             proximity_sensor_readings: ArrayVec::new(),
             attack_p: None,
             scan_p: None,
+            attack_step_count: 0,
         }
     }
 
@@ -403,6 +405,10 @@ impl BrainState {
         self.attack_p = None;
         self.scan_p = None;
 
+        // TODO:
+        // Detect if the robot is moving weapon first into arena wall, and if
+        // so, prioritize a wall avoidance maneuver
+
         // See if the enemy can be reasonably found on the map
 
         // TODO: Improve enemy finding
@@ -448,6 +454,7 @@ impl BrainState {
         }
 
         println!("scan");
+        self.attack_step_count = 0;
         return self.create_scanning_motion();
     }
 
@@ -485,6 +492,7 @@ impl BrainState {
                             target_p, max_linear_speed, max_rotation_speed);
             // Apply motor speed modulation to get scanning data
             wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+            /*// Stupid logic
             if self.proximity_sensor_readings.len() >= 6 {
                 let d0 = self.proximity_sensor_readings[0].1;
                 let d1 = self.proximity_sensor_readings[1].1;
@@ -498,7 +506,7 @@ impl BrainState {
                     wanted_linear_speed = -15.0;
                     wanted_rotation_speed = PI * 1.0;
                 }
-            }
+            }*/
             return (wanted_linear_speed, wanted_rotation_speed);
         }
         let wanted_linear_speed = 100.0;
@@ -519,11 +527,13 @@ impl BrainState {
                         target_p, max_linear_speed, max_rotation_speed);
         // Apply some motor speed modulation to get scanning data to help stay
         // on target
-        //wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
         // Revert linear speed at an interval to allow the weapon to spin up
-        if self.counter > UPS * 2 && ((self.counter + self.seed as u64) % (UPS * 4)) < (UPS * 1) {
+        if self.attack_step_count > UPS * 2 &&
+                ((self.attack_step_count as u32) % (UPS * 4)) < (UPS * 1) {
             wanted_linear_speed *= -1.0;
         }
+        self.attack_step_count += 1;
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
@@ -548,7 +558,7 @@ impl BrainState {
         let heading = Rotation2::rotation_between(&Vector2::x(), &u);
         let target_angle_rad = heading.angle();
         let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
-        let speed_factor = (u.magnitude() / 20.0 - angle_diff / PI * 2.0).clamp(0.0, 1.0);
+        let mut speed_factor = ((u.magnitude() / 20.0).clamp(0.0, 1.0) - angle_diff / PI * 2.0).clamp(0.0, 1.0);
         let wanted_linear_speed = max_linear_speed * speed_factor;
         let wanted_rotation_speed = self.steer_towards_absolute_angle(
                 target_angle_rad, max_rotation_speed);

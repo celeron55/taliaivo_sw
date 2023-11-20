@@ -12,7 +12,7 @@ use sumobrain_common::{RobotInterface, BrainState, Map};
 use arrayvec::ArrayVec;
 
 const FPS: u64 = 120;
-const UPS: u64 = sumobrain_common::UPS;
+const UPS: u64 = sumobrain_common::UPS as u64;
 const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 20; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
