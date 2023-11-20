@@ -101,7 +101,7 @@ impl Robot {
             .linvel(velocity)
             .angvel(angular_velocity)
             .build();
-        let box_collider = ColliderBuilder::cuboid(width, height)
+        let box_collider = ColliderBuilder::cuboid(width / 2.0, height / 2.0)
             .density(0.008) // About right for 11.5x10cm = 900g
             .collision_groups(interaction_groups)
             .build();
@@ -127,7 +127,7 @@ impl Robot {
         let blade_rigid_body = RigidBodyBuilder::dynamic()
             .angvel(angular_velocity)
             .build();
-        let blade_collider = ColliderBuilder::cuboid(blade_width, blade_height)
+        let blade_collider = ColliderBuilder::cuboid(blade_width / 2.0, blade_height / 2.0)
             .density(0.008) // About right for 11.5x10cm = 900g
             .collision_groups(interaction_groups)
             .build();
@@ -180,13 +180,13 @@ impl Robot {
                                 .trans(half_extents.x as f64, half_extents.y as f64),
                               g);
                     rectangle([0.8, 0.8, 0.8, 1.0], 
-                              [-1.5, half_extents.y as f64 - 6.0, 3.0, 3.0],
+                              [-0.75, half_extents.y as f64 - 3.0, 1.5, 1.5],
                               transform
                                 .trans(position.translation.x as f64, position.translation.y as f64)
                                 .rot_rad(rotation as f64),
                               g);
                     rectangle([0.8, 0.8, 0.2, 1.0], 
-                              [half_extents.x as f64 - 6.0, half_extents.y as f64 - 6.0, 3.0, 3.0],
+                              [half_extents.x as f64 - 3.0, half_extents.y as f64 - 3.0, 1.5, 1.5],
                               transform
                                 .trans(position.translation.x as f64, position.translation.y as f64)
                                 .rot_rad(rotation as f64),
@@ -228,9 +228,16 @@ impl Robot {
             let right_wheel_driven_velocity_local = Vector2::new(0.0, self.wheel_speed_right);
             //println!("wheel_driven_velocity_local: L={:?}\tR={:?}", left_wheel_driven_velocity_local, right_wheel_driven_velocity_local);
 
-            // TODO: is this correct?
-            let left_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.left_wheel_position.coords;
-            let right_wheel_ground_velocity_local = robot_velocity_local + robot_angular_velocity * self.right_wheel_position.coords;
+            // Perpendicular velocity due to rotation (rotational velocity =
+            // radius x angular velocity)
+            let left_wheel_radius_vector = Vector2::new(self.left_wheel_position.x, self.left_wheel_position.y);
+            let right_wheel_radius_vector = Vector2::new(self.right_wheel_position.x, self.right_wheel_position.y);
+            let left_wheel_rotational_velocity = Vector2::new(-left_wheel_radius_vector.y, left_wheel_radius_vector.x) * robot_angular_velocity;
+            let right_wheel_rotational_velocity = Vector2::new(-right_wheel_radius_vector.y, right_wheel_radius_vector.x) * robot_angular_velocity;
+
+            // Total ground velocity at wheel positions
+            let left_wheel_ground_velocity_local = robot_velocity_local + left_wheel_rotational_velocity;
+            let right_wheel_ground_velocity_local = robot_velocity_local + right_wheel_rotational_velocity;
             //println!("wheel_ground_velocity_local: L={:?}\tR={:?}", left_wheel_ground_velocity_local, right_wheel_ground_velocity_local);
 
             // Calculate the speed differences in the local frame
@@ -319,7 +326,7 @@ impl ArenaWall {
         let wall_rigid_body = RigidBodyBuilder::fixed()
             .translation(vector![x, y])
             .build();
-        let wall_collider = ColliderBuilder::cuboid(width, height)
+        let wall_collider = ColliderBuilder::cuboid(width / 2.0, height / 2.0)
             .collision_groups(InteractionGroups::new(
                     (GROUP_ARENA).into(), (GROUP_ENEMY | GROUP_EGO | GROUP_BLADE).into()))
             .build();
@@ -377,8 +384,12 @@ fn main() {
     let event_handler = ();
 
     let mut robots = vec![
+        /*Robot::new(&mut rigid_body_set, &mut collider_set,
+                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 1.0,
+                InteractionGroups::new(
+                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),*/
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                35.0, 100.0, 10.0, 11.5, (PI*0.25) as f32, Vector2::new(0.0, 0.0), 0.0,
+                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),
         Robot::new(&mut rigid_body_set, &mut collider_set,
@@ -388,15 +399,15 @@ fn main() {
                         (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
     ];
     robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
-            10.0, 2.0, 0.0, point![0.0, 10.0],
+            10.0, 2.0, 0.0, point![0.0, 4.0],
             InteractionGroups::new(
                     (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
 
     let arena_walls = vec![
-        ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 10.0, 180.0 / 2.0, 5.0 / 2.0),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 10.0, 100.0, 5.0 / 2.0, 180.0 / 2.0),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 190.0, 100.0, 5.0 / 2.0, 180.0 / 2.0),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 190.0, 180.0 / 2.0, 5.0 / 2.0),
+        ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 10.0, 180.0, 5.0),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 10.0, 100.0, 5.0, 180.0),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 190.0, 100.0, 5.0, 180.0),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 190.0, 180.0, 5.0),
         // Repeat for other walls
     ];
 
