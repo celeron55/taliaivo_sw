@@ -139,6 +139,11 @@ impl BrainState {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
+        self.map.hough_transform(|line: map::HoughLine| {
+            println!("HoughLine: angle={:?} distance={:?} votes={:?}",
+                    line.angle, line.distance, line.votes);
+        });
+
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p);
 
         let mut wanted_linear_speed = 0.0;

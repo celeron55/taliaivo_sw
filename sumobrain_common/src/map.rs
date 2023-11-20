@@ -227,3 +227,130 @@ impl Map {
         score
     }
 }
+
+const MIN_DISTANCE: i32 = -(MAP_W as i32 / 2);
+const MAX_DISTANCE: i32 =  (MAP_W as i32 / 2);
+const DISTANCE_STEP: usize = 2; // Distance resolution
+const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
+const NUM_DISTANCES: usize = (MAX_DISTANCE - MIN_DISTANCE) as usize / DISTANCE_STEP;
+const NUM_ANGLES: usize = 180 / ANGLE_STEP;
+
+type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
+
+pub struct HoughLine {
+    pub angle: f32,
+    pub distance: f32,
+    pub votes: usize,
+}
+
+impl HoughLine {
+    fn new(angle: f32, distance: f32, votes: usize) -> Self {
+        HoughLine {
+            angle: angle,
+            distance: distance,
+            votes: votes,
+        }
+    }
+}
+
+impl Map {
+    pub fn hough_transform<F>(&self, mut callback: F)
+    where F: FnMut(HoughLine) {
+        let mut accumulator = Accumulator::new();
+        // Initialize accumulator with zerosa
+        for _ in 0..NUM_ANGLES {
+            let mut distances = ArrayVec::<u16, NUM_DISTANCES>::new();
+            for _ in 0..NUM_DISTANCES {
+                distances.push(0); // Initialize each distance element to 0
+            }
+            accumulator.push(distances); // Add to accumulator
+        }
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                if self.is_edge(x, y) {
+                    for angle_index in 0..NUM_ANGLES {
+                        let angle = angle_index as f32 * ANGLE_STEP as f32;
+                        let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()) / DISTANCE_STEP as f32;
+                        if (distance as i32) > MIN_DISTANCE && (distance as i32) < MAX_DISTANCE {
+                            let distance_index = (distance as i32 - MIN_DISTANCE) as usize / DISTANCE_STEP;
+                            /*println!("angle: {:?}, angle_index: {:?}, distance: {:?}, distance_index: {:?}",
+                                    angle, angle_index, distance, distance_index);*/
+                            accumulator[angle_index][distance_index] += 1;
+                        }
+                    }
+                }
+            }
+        }
+
+        self.detect_lines(&accumulator, callback)
+    }
+
+    pub fn is_edge(&self, x: u32, y: u32) -> bool {
+        // The given x,y position is considered to be position 0.
+        // For us to consider the position an edge, it must have a high value
+        // (i.e. it must be the inside of a solid wall). If it is not, we
+        // discard the position immediately.
+        let i0 = (y * self.width + x) as usize;
+        if self.data[i0] < 50.0 {
+            return false;
+        }
+        // For us to consider the position an edge, it must have a neighbor with
+        // a low value.
+        let dirs = [
+            (-1, 0),
+            ( 1, 0),
+            ( 0,-1),
+            ( 0, 1),
+        ];
+        for dir in dirs {
+            let x1 = x as i32 + dir.0;
+            let y1 = y as i32 + dir.1;
+            if x1 < 0 || x1 >= self.width as i32 || y1 < 0 || y1 >= self.height as i32 {
+                continue;
+            }
+            let i1 = (y1 as usize * self.width as usize + x1 as usize) as usize;
+            if self.data[i1] < -50.0 {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    pub fn detect_lines<F>(&self, accumulator: &Accumulator, mut callback: F)
+    where F: FnMut(HoughLine) {
+        // TODO: Adjust
+        const MAX_NUM_LINE_CANDIDATES: usize = 100;
+        const THRESHOLD: usize = 6;
+
+        let mut line_candidates: ArrayVec<(usize, usize, u16), MAX_NUM_LINE_CANDIDATES> =
+                ArrayVec::new();
+
+        // Find peaks in the accumulator
+        for (angle_index, distances) in accumulator.iter().enumerate() {
+            for (distance_index, &votes) in distances.iter().enumerate() {
+                //println!("votes: {:?}", votes);
+                if votes as usize >= THRESHOLD { // THRESHOLD is a predefined constant
+                    // TODO: Maybe care about the result
+                    line_candidates.try_push((angle_index, distance_index, votes));
+                }
+            }
+        }
+
+        // Sort by votes and select top lines
+        line_candidates.sort_by(|a, b| b.2.cmp(&a.2)); // Sort in descending order of votes
+        //line_candidates.truncate(4); // Keep only the top 4 lines
+
+        // Invoke the callback for each line
+        for &(angle_index, distance_index, votes) in &line_candidates {
+            let angle = angle_index as f32 * ANGLE_STEP as f32;
+            let distance = distance_index as f32 * DISTANCE_STEP as f32;
+            callback(HoughLine::new(angle, distance, votes.into()))
+        }
+    }
+
+    // TODO: Remove
+    /*pub fn filter_lines(&self, lines: Vec<HoughLine>) -> Vec<HoughLine> {
+        // Logic to filter out irrelevant lines
+    }*/
+}
