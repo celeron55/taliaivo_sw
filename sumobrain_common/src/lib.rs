@@ -376,6 +376,14 @@ impl BrainState {
         self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
                 wanted_wheel_speed_right, 250.0 / UPS as f32);
 
+        // Rotation has to be prioritized, thus if the wanted wheel speed
+        // difference wasn't applied, force it, ignoring acceleration
+        // TODO: Rethink this
+        let avg_applied_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
+        let wanted_difference = wanted_wheel_speed_left - wanted_wheel_speed_right;
+        self.applied_wheel_speed_left = avg_applied_speed + wanted_difference / 2.0;
+        self.applied_wheel_speed_right = avg_applied_speed - wanted_difference / 2.0;
+
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 
         let mut weapon_throttle = 100.0;
@@ -474,7 +482,7 @@ impl BrainState {
     pub fn create_attack_motion(&mut self, target_p: Point2<f32>) -> (f32, f32) {
         self.attack_p = Some(target_p);
         // Drive towards target
-        let max_linear_speed = 100.0;
+        let max_linear_speed = 200.0;
         let max_rotation_speed = PI * 4.0;
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
