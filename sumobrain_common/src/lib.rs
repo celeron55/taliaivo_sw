@@ -312,59 +312,7 @@ impl BrainState {
         let mut wanted_linear_speed = 0.0;
         let mut wanted_rotation_speed = 0.0;
 
-        // TODO: Remove
-        let s = 60.0;
-        let dur = 6;
-        if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
-            wanted_linear_speed = -s;
-        } else {
-            wanted_linear_speed = s;
-        }
-
-        // TODO: Remove
-        if self.proximity_sensor_readings.len() >= 6 {
-            let d0 = self.proximity_sensor_readings[0].1;
-            let d1 = self.proximity_sensor_readings[1].1;
-            let d2 = self.proximity_sensor_readings[2].1;
-            let d3 = self.proximity_sensor_readings[3].1;
-            let d4 = self.proximity_sensor_readings[4].1;
-            let d5 = self.proximity_sensor_readings[5].1;
-            // Assume the first 3 sensors are pointing somewhat forward and if they
-            // all are showing short distance, don't try to push further
-            // TODO: Make an exception when it has been determined that we are
-            // pushing against the opponent instead of a wall
-            if d0 < 10.0 && d1 < 15.0 && d2 < 15.0 {
-                wanted_linear_speed = -5.0;
-                wanted_rotation_speed = 1.0;
-            }
-            // Assume sensor [5] is pointing rearwards. Don't try to reverse more if
-            // it's detecting something.
-            if d5 < 10.0 {
-                wanted_linear_speed = 5.0;
-                wanted_rotation_speed = 0.0;
-            }
-            // Try to steer away from walls on the sides
-            if d3 < 10.0 && d0 > 30.0 {
-                wanted_linear_speed = 22.25;
-                wanted_rotation_speed = 1.0;
-            }
-            if d4 < 10.0 && d0 > 30.0 {
-                wanted_linear_speed = 22.25;
-                wanted_rotation_speed = -1.0;
-            }
-        }
-
         (wanted_linear_speed, wanted_rotation_speed) = self.create_motion();
-
-        /*// TODO: Remove or replace
-        let wanted_absolute_angle = PI * 0.5;
-        let max_rotation_speed = PI * 3.0;
-        let max_linear_speed = 30.0;
-        let target_p = Point2::new(100.0, 100.0);
-        //wanted_rotation_speed = self.steer_towards_absolute_angle(
-        //        wanted_absolute_angle, max_rotation_speed);
-        (wanted_linear_speed, wanted_rotation_speed) = self.drive_towards_absolute_position(
-                target_p, max_linear_speed, max_rotation_speed);*/
 
         let track = robot.get_track_width();
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
@@ -401,6 +349,7 @@ impl BrainState {
         self.scan_p = None;
 
         // See if the enemy can be reasonably found on the map
+        // TODO: Improve enemy finding
         /*let pattern_w: u32 = 4;
         let pattern_h: u32 = 4;
         let pattern = [
@@ -472,6 +421,20 @@ impl BrainState {
                             target_p, max_linear_speed, max_rotation_speed);
             // Apply very strong motor speed modulation to get scanning data
             //wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 7.0).sin() * 2.0;
+            if self.proximity_sensor_readings.len() >= 6 {
+                let d0 = self.proximity_sensor_readings[0].1;
+                let d1 = self.proximity_sensor_readings[1].1;
+                let d2 = self.proximity_sensor_readings[2].1;
+                let d3 = self.proximity_sensor_readings[3].1;
+                let d4 = self.proximity_sensor_readings[4].1;
+                let d5 = self.proximity_sensor_readings[5].1;
+                // Assume the first 3 sensors are pointing somewhat forward and if they
+                // all are showing short distance, don't try to push further
+                if d0 < 10.0 && d1 < 15.0 && d2 < 15.0 {
+                    wanted_linear_speed = -15.0;
+                    wanted_rotation_speed = PI * 1.0;
+                }
+            }
             return (wanted_linear_speed, wanted_rotation_speed);
         }
         let wanted_linear_speed = 100.0;
