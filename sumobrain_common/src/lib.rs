@@ -349,8 +349,12 @@ impl BrainState {
         self.scan_p = None;
 
         // See if the enemy can be reasonably found on the map
-        // TODO: Improve enemy finding. The enemy can take many shapes within
-        // 2x2 tiles and it can be against a wall.
+
+        // TODO: Improve enemy finding
+        // - The enemy can take many shapes within 2x2 tiles
+        // - The enemy can be against a wall
+        // - The age of information about the enemy can vary
+
         /*let pattern_w: u32 = 4;
         let pattern_h: u32 = 4;
         let pattern = [
