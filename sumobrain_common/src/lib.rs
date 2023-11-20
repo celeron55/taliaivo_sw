@@ -4,7 +4,7 @@ extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
 use libc_print::std_name::{println, eprintln, print, dbg};
-use nalgebra::{Vector2, Point2, UnitComplex};
+use nalgebra::{Vector2, Point2, UnitComplex, Rotation2};
 use core::f32::consts::PI;
 
 pub trait RobotInterface {
@@ -308,9 +308,13 @@ impl BrainState {
 
         // TODO: Remove or replace
         let wanted_absolute_angle = PI * 0.5;
-        let max_rotation_speed = PI * 2.0;
-        wanted_rotation_speed = self.steer_towards_absolute_angle(
-                wanted_absolute_angle, max_rotation_speed);
+        let max_rotation_speed = PI * 3.0;
+        let max_linear_speed = 30.0;
+        let target_p = Point2::new(100.0, 100.0);
+        //wanted_rotation_speed = self.steer_towards_absolute_angle(
+        //        wanted_absolute_angle, max_rotation_speed);
+        (wanted_linear_speed, wanted_rotation_speed) = self.drive_towards_absolute_position(
+                target_p, max_linear_speed, max_rotation_speed);
 
         let track = robot.get_track_width();
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
@@ -334,14 +338,27 @@ impl BrainState {
     }
 
     // Returns a value suitable for wanted_rotation_speed
-    pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32, rotation_speed: f32) -> f32 {
+    pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32, max_rotation_speed: f32) -> f32 {
         let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
-        println!("angle_diff: {:?}", angle_diff);
+        //println!("angle_diff: {:?}", angle_diff);
         let speed_factor = 0.1 + (angle_diff.abs() / PI * 0.9);
         if angle_diff > 0.0 {
-            return speed_factor * rotation_speed;
+            return speed_factor * max_rotation_speed;
         } else {
-            return speed_factor * -rotation_speed;
+            return speed_factor * -max_rotation_speed;
         }
+    }
+
+    // Returns a value suitable for wanted_linear_speed and wanted_rotation_speed
+    pub fn drive_towards_absolute_position(&self, target_p: Point2<f32>,
+            max_linear_speed: f32, max_rotation_speed: f32) -> (f32, f32) {
+        let u = target_p - self.pos;
+        let heading = Rotation2::rotation_between(&Vector2::x(), &u);
+        let target_angle_rad = heading.angle();
+        let speed_factor = (u.magnitude() / 20.0).clamp(0.0, 1.0);
+        let wanted_linear_speed = max_linear_speed * speed_factor;
+        let wanted_rotation_speed = self.steer_towards_absolute_angle(
+                target_angle_rad, max_rotation_speed);
+        return (wanted_linear_speed, wanted_rotation_speed)
     }
 }
