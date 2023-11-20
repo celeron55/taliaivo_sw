@@ -39,11 +39,12 @@ const MAP_W: u32 = (MAP_W_REAL / MAP_T) as u32; // Map width in tiles
 const MAP_H: u32 = MAP_W;
 const MAP_SIZE: usize = (MAP_W * MAP_H) as usize;
 
+#[derive(Clone)]
 pub struct Map {
-    tile_wh: f32,
-    width: u32,
-    height: u32,
-    data: ArrayVec<f32, MAP_SIZE>,
+    pub tile_wh: f32,
+    pub width: u32,
+    pub height: u32,
+    pub data: ArrayVec<f32, MAP_SIZE>,
 }
 
 impl Map {
@@ -222,7 +223,7 @@ impl BrainState {
 
         let proximity_sensor_readings = robot.get_proximity_sensors();
 
-        println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
+        //println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
 
         self.map.global_forget(0.998);
 

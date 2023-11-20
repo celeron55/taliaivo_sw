@@ -1,4 +1,5 @@
 extern crate piston_window;
+                // TODO
 extern crate rapier2d;
 extern crate sumobrain_common;
 extern crate arrayvec; // Use static arrays like the embedded code
@@ -29,6 +30,9 @@ struct Robot {
     weapon_throttle: f32, // -100 to +100
     proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
     gyro_z: f32,
+    diagnostic_map: Map,
+    diagnostic_robot_p: Point2<f32>,
+    diagnostic_robot_r: f32,
 }
 
 struct ArenaWall {
@@ -85,8 +89,9 @@ impl RobotInterface for Robot {
 
     // Diagnostic data
     fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32) {
-        map.print(robot_p);
-        // TODO
+        self.diagnostic_map = map.clone();
+        self.diagnostic_robot_p = robot_p;
+        self.diagnostic_robot_r = robot_r;
     }
 }
 
@@ -116,6 +121,9 @@ impl Robot {
             weapon_throttle: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
             gyro_z: 0.0,
+            diagnostic_map: Map::new(),
+            diagnostic_robot_p: Point2::new(0.0, 0.0),
+            diagnostic_robot_r: 0.0,
         }
     }
 
@@ -318,6 +326,27 @@ impl Robot {
             }
 		}
     }
+
+    fn draw_map(&self, c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2]) {
+        let tile_size: f64 = 3.0;
+        let map = &self.diagnostic_map;
+        for y in 0..map.height {
+            for x in 0..map.width {
+                let idx = (y * map.width + x) as usize;
+                let tile = map.data[idx];
+                rectangle([
+                        (tile + 100.0) / 200.0,
+                        (tile + 100.0) / 200.0,
+                        (tile + 100.0) / 200.0,
+                        1.0
+                    ], 
+                    [tile_size * x as f64, tile_size * y as f64, tile_size, tile_size],
+                    transform
+                        .trans(200.0, 10.0),
+                    g);
+            }
+        }
+    }
 }
 
 impl ArenaWall {
@@ -354,6 +383,7 @@ impl ArenaWall {
         }
     }
 }
+
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("Sumobrain Simulator", [1200, 600])
         .exit_on_esc(true)
@@ -440,6 +470,8 @@ fn main() {
                             .trans(10.0, 7.0)
                             .rot_rad(PI * 0.25),
                           g);
+
+                robots[0].draw_map(&c, g, &transform);
             });
         }
 
