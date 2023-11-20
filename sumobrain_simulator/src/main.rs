@@ -7,7 +7,7 @@ use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
-use sumobrain_common::{RobotInterface, BrainState};
+use sumobrain_common::{RobotInterface, BrainState, Map};
 use arrayvec::ArrayVec;
 
 const FPS: u64 = 120;
@@ -84,10 +84,9 @@ impl RobotInterface for Robot {
     }
 
     // Diagnostic data
-    fn report_map(&mut self, map_width: u32, map_height: u32, map_data: &[&f32]) {
+    fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32) {
+        map.print(robot_p);
         // TODO
-    }
-    fn report_position_on_map(&mut self, x: f32, y: f32) {
     }
 }
 

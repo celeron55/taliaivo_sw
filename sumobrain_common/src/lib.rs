@@ -28,8 +28,7 @@ pub trait RobotInterface {
     fn set_led_status(&mut self, status: bool);
 
     // Diagnostic data
-    fn report_map(&mut self, map_width: u32, map_height: u32, map_data: &[&f32]);
-    fn report_position_on_map(&mut self, x: f32, y: f32);
+    fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32);
 }
 
 pub const UPS: u64 = 100; // Updates per second
@@ -231,7 +230,7 @@ impl BrainState {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
-        self.map.print(self.pos);
+        robot.report_map(&self.map, self.pos, self.rot);
 
         // Assume the first 3 sensors are pointing somewhat forward and if they
         // all are showing short distance, don't try to push further
