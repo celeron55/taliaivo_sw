@@ -1,8 +1,8 @@
 extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
-use libc_print::std_name::{println, eprintln, print, dbg};
-use nalgebra::{Vector2, Point2, UnitComplex, Rotation2};
+use libc_print::std_name::{println, print};
+use nalgebra::{Vector2, Point2};
 
 pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm
@@ -228,12 +228,12 @@ impl Map {
     }
 }
 
-const MIN_DISTANCE: i32 = -(MAP_W as i32 / 2);
-const MAX_DISTANCE: i32 =  (MAP_W as i32 / 2);
+const MIN_DISTANCE: i32 = 0;
+const MAX_DISTANCE: i32 = MAP_W as i32;
 const DISTANCE_STEP: usize = 2; // Distance resolution
 const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = (MAX_DISTANCE - MIN_DISTANCE) as usize / DISTANCE_STEP;
-const NUM_ANGLES: usize = 180 / ANGLE_STEP;
+const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
 const MAX_NUM_LINE_CANDIDATES: usize = 100;
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
@@ -271,8 +271,7 @@ fn angle_difference(angle1: f32, angle2: f32) -> f32 {
 }
 
 impl Map {
-    pub fn hough_transform<F>(&self, mut callback: F)
-    where F: FnMut(HoughLine) {
+    pub fn hough_transform(&self) -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
         let mut accumulator = Accumulator::new();
         // Initialize accumulator with zerosa
         for _ in 0..NUM_ANGLES {
@@ -288,8 +287,9 @@ impl Map {
                 if self.is_edge(x, y) {
                     for angle_index in 0..NUM_ANGLES {
                         let angle = angle_index as f32 * ANGLE_STEP as f32;
-                        let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()) / DISTANCE_STEP as f32;
-                        if (distance as i32) > MIN_DISTANCE && (distance as i32) < MAX_DISTANCE {
+                        let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()).abs() / DISTANCE_STEP as f32;
+                        if (distance as i32) >= MIN_DISTANCE && (distance as i32) < MAX_DISTANCE {
+                            println!("distance: {:?}", distance);
                             let distance_index = (distance as i32 - MIN_DISTANCE) as usize / DISTANCE_STEP;
                             /*println!("angle: {:?}, angle_index: {:?}, distance: {:?}, distance_index: {:?}",
                                     angle, angle_index, distance, distance_index);*/
@@ -300,7 +300,7 @@ impl Map {
             }
         }
 
-        self.detect_lines(&accumulator, callback)
+        self.detect_lines(&accumulator)
     }
 
     pub fn is_edge(&self, x: u32, y: u32) -> bool {
@@ -326,7 +326,7 @@ impl Map {
             if x1 < 0 || x1 >= self.width as i32 || y1 < 0 || y1 >= self.height as i32 {
                 continue;
             }
-            let i1 = (y1 as usize * self.width as usize + x1 as usize) as usize;
+            let i1 = (y1 as u32 * self.width + x1 as u32) as usize;
             if self.data[i1] < -50.0 {
                 return true;
             }
@@ -334,8 +334,7 @@ impl Map {
         return false;
     }
 
-    pub fn detect_lines<F>(&self, accumulator: &Accumulator, mut callback: F)
-    where F: FnMut(HoughLine) {
+    pub fn detect_lines(&self, accumulator: &Accumulator) -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
         // TODO: Adjust
         const THRESHOLD: usize = 6;
 
@@ -349,22 +348,19 @@ impl Map {
                 if votes as usize >= THRESHOLD { // THRESHOLD is a predefined constant
                     // TODO: Maybe care about the result of the try_push
                     let angle = angle_index as f32 * ANGLE_STEP as f32;
-                    let distance = distance_index as f32 * DISTANCE_STEP as f32;
+                    let distance = distance_index as f32 * DISTANCE_STEP as f32 + MIN_DISTANCE as f32;
                     line_candidates.try_push(HoughLine::new(angle, distance, votes.into()));
                 }
             }
         }
 
-        line_candidates = self.merge_similar_lines(line_candidates);
+        //line_candidates = self.merge_similar_lines(line_candidates);
 
         // Sort by votes and select top lines
         line_candidates.sort_by(|a, b| b.votes.cmp(&a.votes)); // Sort in descending order of votes
         //line_candidates.truncate(4); // Keep only the top 4 lines
 
-        // Invoke the callback for each line
-        for line in line_candidates {
-            callback(line);
-        }
+        return line_candidates;
     }
 
     fn merge_similar_lines(&self, lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>)
@@ -393,7 +389,8 @@ impl Map {
             let average_line = similar_lines.iter().fold(HoughLine::default(), |acc, line| {
                 HoughLine {
                     angle: 0.0, // Cannot be averaged this way
-                    distance: acc.distance + line.distance * line.votes as f32, // Weighed average
+                    //distance: acc.distance + line.distance * line.votes as f32, // Weighed average
+                    distance: acc.distance + line.distance,
                     votes: acc.votes + line.votes,
                     // handle other fields if any
                 }
@@ -408,7 +405,8 @@ impl Map {
 
             merged_lines.push(HoughLine {
                 angle: average_angle, // TODO: Weighed average
-                distance: average_line.distance / average_line.votes as f32, // Weighed average
+                //distance: average_line.distance / average_line.votes as f32, // Weighed average
+                distance: average_line.distance / similar_lines.len() as f32, // Weighed average
                 votes: average_line.votes,
                 // handle other fields if any
             });

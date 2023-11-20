@@ -4,8 +4,8 @@ extern crate arrayvec; // Use static arrays like the embedded code
 pub mod map;
 
 use arrayvec::ArrayVec;
-use libc_print::std_name::{println, eprintln, print, dbg};
-use nalgebra::{Vector2, Point2, UnitComplex, Rotation2};
+use libc_print::std_name::{println};
+use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 pub use map::*;
 
@@ -34,7 +34,8 @@ pub trait RobotInterface {
 
     // Diagnostic data
     fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32,
-            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>);
+            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>,
+            lines: &[HoughLine]);
 }
 
 pub const UPS: u32 = 100; // Updates per second
@@ -139,12 +140,13 @@ impl BrainState {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
-        self.map.hough_transform(|line: map::HoughLine| {
+        let mut lines = self.map.hough_transform();
+        for line in &lines {
             println!("HoughLine: angle={:?} distance={:?} votes={:?}",
                     line.angle, line.distance, line.votes);
-        });
+        }
 
-        robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p);
+        robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p, &lines);
 
         let mut wanted_linear_speed = 0.0;
         let mut wanted_rotation_speed = 0.0;

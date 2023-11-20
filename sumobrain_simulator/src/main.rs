@@ -9,6 +9,7 @@ use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
 use sumobrain_common::{RobotInterface, BrainState, Map};
 use arrayvec::ArrayVec;
+use sumobrain_common::map::HoughLine;
 
 const FPS: u64 = 120;
 const UPS: u64 = sumobrain_common::UPS as u64;
@@ -37,6 +38,7 @@ struct Robot {
     diagnostic_robot_r: f32,
     diagnostic_attack_p: Option<Point2<f32>>,
     diagnostic_scan_p: Option<Point2<f32>>,
+    diagnostic_lines: Vec<HoughLine>,
     interaction_groups: InteractionGroups,
 }
 
@@ -99,12 +101,14 @@ impl RobotInterface for Robot {
 
     // Diagnostic data
     fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32,
-            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>) {
+            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>,
+            lines: &[HoughLine]) {
         self.diagnostic_map = map.clone();
         self.diagnostic_robot_p = robot_p;
         self.diagnostic_robot_r = robot_r;
         self.diagnostic_attack_p = attack_p;
         self.diagnostic_scan_p = scan_p;
+        self.diagnostic_lines = lines.to_vec();
     }
 }
 
@@ -139,6 +143,7 @@ impl Robot {
             diagnostic_robot_r: 0.0,
             diagnostic_attack_p: None,
             diagnostic_scan_p: None,
+            diagnostic_lines: Vec::new(),
             interaction_groups: interaction_groups,
         }
     }
@@ -379,8 +384,7 @@ impl Robot {
                     [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
                     transform
                         .trans(tile_size * p.x as f64 / map.tile_wh as f64,
-                                tile_size * p.y as f64 / map.tile_wh as f64)
-                        .rot_rad(r as f64),
+                                tile_size * p.y as f64 / map.tile_wh as f64),
                     g);
         }
         if let Some(p) = self.diagnostic_scan_p {
@@ -388,8 +392,22 @@ impl Robot {
                     [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
                     transform
                         .trans(tile_size * p.x as f64 / map.tile_wh as f64,
+                                tile_size * p.y as f64 / map.tile_wh as f64),
+                    g);
+        }
+
+        for line in &self.diagnostic_lines {
+            let angle_rad = line.angle.to_radians();
+            let line_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
+            let line_point = line_direction * line.distance * self.diagnostic_map.tile_wh;
+            let p = line_point;
+            // TODO
+            rectangle([0.8, 0.8, 0.2, 1.0],
+                    [-tile_size*2.5, -tile_size*0.25, tile_size*5.0, tile_size*0.5],
+                    transform
+                        .trans(tile_size * p.x as f64 / map.tile_wh as f64,
                                 tile_size * p.y as f64 / map.tile_wh as f64)
-                        .rot_rad(r as f64),
+                        .rot_rad(angle_rad as f64),
                     g);
         }
     }
