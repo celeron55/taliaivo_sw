@@ -64,8 +64,8 @@ impl Map {
 
     // something_seen: If nothing is found within sensor range, set this to
     // true, and set distance to the sensor maximum range
-    pub fn paint_proximity_reading(&mut self, starting_position: Point2<f32>, angle_rad: f32, distance: f32,
-            something_seen: bool) {
+    pub fn paint_proximity_reading(&mut self, starting_position: Point2<f32>,
+            angle_rad: f32, distance: f32, something_seen: bool) {
         // Calculate end point of the ray
         let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
         let end_point = starting_position + direction * distance;
@@ -95,9 +95,11 @@ impl Map {
             if e2 <= dx { err += dx; y0 += sy; }
         }
 
-        // Paint the end tile
-        if let Some(tile) = self.data.get_mut((y1 as u32 * self.width + x1 as u32) as usize) {
-            *tile = 100.0;
+        if something_seen {
+            // Paint the end tile
+            if let Some(tile) = self.data.get_mut((y1 as u32 * self.width + x1 as u32) as usize) {
+                *tile = 100.0;
+            }
         }
     }
 
@@ -168,31 +170,27 @@ impl BrainState {
         let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
         println!("gyro_z: {:?}", gyro_z);
 
+        let s = 15.0;
         let mut wheel_speed_left = {
-            let mut speed = 150.0;
+            let mut speed = s;
             if (self.counter % (UPS * 10)) < (UPS * 5) {
-                speed = -150.0;
+                speed = -s;
             }
             speed
         };
         let mut wheel_speed_right = {
-            let mut speed = 150.0;
+            let mut speed = s;
             if (self.counter % (UPS * 10)) < (UPS * 5) {
-                speed = -150.0;
+                speed = -s;
             }
             speed
         };
-
-        if gyro_z.abs() > 1.5 {
-            wheel_speed_left *= 0.1;
-            wheel_speed_right *= 0.1;
-        }
 
         let proximity_sensor_readings = robot.get_proximity_sensors();
 
         println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
 
-        self.map.global_forget(0.99);
+        self.map.global_forget(0.999);
 
         for reading in &proximity_sensor_readings {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
@@ -200,7 +198,7 @@ impl BrainState {
 
         self.map.print();
 
-        if proximity_sensor_readings.len() >= 6 {
+        /*if proximity_sensor_readings.len() >= 6 {
             {
                 let distance = proximity_sensor_readings[0].1;
                 if distance < 20.0 {
@@ -215,7 +213,7 @@ impl BrainState {
                     wheel_speed_right = 50.0;
                 }
             }
-        }
+        }*/
 
         // TODO: Limit wheel speed changes, i.e. limit acceleration
 
@@ -229,6 +227,9 @@ impl BrainState {
 
         // TODO: Make sure this is scaled appropriately
         self.rot += gyro_z / UPS as f32;
+
+        // TODO: If gyro_z doesn't match rotation caused by wheel speeds, assume
+        // a wheel is not touching the ground and act differently
 
         // TODO: Maintain self.rot via motor speeds
 

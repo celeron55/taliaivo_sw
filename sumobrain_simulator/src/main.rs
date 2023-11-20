@@ -384,24 +384,20 @@ fn main() {
     let event_handler = ();
 
     let mut robots = vec![
-        /*Robot::new(&mut rigid_body_set, &mut collider_set,
-                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 1.0,
-                InteractionGroups::new(
-                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),*/
         Robot::new(&mut rigid_body_set, &mut collider_set,
                 100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                150.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(-1.0, 0.0), -0.2,
+                120.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ENEMY).into(),
                         (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
     ];
-    robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+    /*robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
             10.0, 2.0, 0.0, point![0.0, 4.0],
             InteractionGroups::new(
-                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
+                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));*/
 
     let asize = 150.0;
     let ad = 10.0;
