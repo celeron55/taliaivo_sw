@@ -489,8 +489,8 @@ fn main() {
         // Repeat for other walls
     ];
 
-    let mut brain = BrainState::new();
-    let mut brain2 = BrainState::new();
+    let mut brain = BrainState::new(0);
+    let mut brain2 = BrainState::new(UPS as u32 * 2);
 
     let mut counter: u64 = 0;
 
@@ -530,7 +530,7 @@ fn main() {
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            //brain2.update(&mut robots[1]);
+            brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {

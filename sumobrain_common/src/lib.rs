@@ -279,6 +279,7 @@ fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -
 }
 
 pub struct BrainState {
+    seed: u32,
     counter: u64,
     map: Map,
     pos: Point2<f32>, // Position of robot on map
@@ -292,8 +293,9 @@ pub struct BrainState {
 }
 
 impl BrainState {
-    pub fn new() -> Self {
+    pub fn new(seed: u32) -> Self {
         BrainState {
+            seed: seed,
             counter: 0,
             map: Map::new(),
             pos: Point2::new(100.0, 100.0),
@@ -408,24 +410,6 @@ impl BrainState {
         // - The enemy can be against a wall
         // - The age of information about the enemy can vary
 
-        /*let pattern_w: u32 = 4;
-        let pattern_h: u32 = 4;
-        let pattern = [
-            -100.0, -100.0, -100.0, -100.0,
-            -100.0,  100.0,  100.0, -100.0,
-            -100.0,  100.0,  100.0, -100.0,
-            -100.0, -100.0, -100.0, -100.0,
-        ];*/
-        /*let pattern_w: u32 = 6;
-        let pattern_h: u32 = 6;
-        let pattern = [
-            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
-            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
-            -100.0, -100.0,  100.0,  100.0, -100.0, -100.0,
-            -100.0, -100.0,  100.0,  100.0, -100.0, -100.0,
-            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
-            -100.0, -100.0, -100.0, -100.0, -100.0, -100.0,
-        ];*/
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -475,15 +459,16 @@ impl BrainState {
         //       drive through walls
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
+        let v = -40.0;
         let pattern = [
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            v, v, v, v, v, v,
+            v, v, v, v, v, v,
+            v, v, v, v, v, v,
+            v, v, v, v, v, v,
+            v, v, v, v, v, v,
+            v, v, v, v, v, v,
         ];
-        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 5.0, 30.0);
+        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 5.0, 100.0);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
@@ -526,14 +511,14 @@ impl BrainState {
         /*let max_linear_speed = 200.0;
         let max_rotation_speed = PI * 4.0;*/
         let max_linear_speed = 100.0;
-        let max_rotation_speed = PI * 2.0;
+        let max_rotation_speed = PI * 4.0;
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
                         target_p, max_linear_speed, max_rotation_speed);
         // Apply some motor speed modulation to get scanning data
         wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 4.0).sin() * 1.0;
         // Revert linear speed at an interval to allow the weapon to spin up
-        if self.counter > UPS * 2 && (self.counter % (UPS * 4)) < (UPS * 1) {
+        if self.counter > UPS * 2 && ((self.counter + self.seed as u64) % (UPS * 4)) < (UPS * 1) {
             wanted_linear_speed *= -1.0;
         }
         return (wanted_linear_speed, wanted_rotation_speed);
