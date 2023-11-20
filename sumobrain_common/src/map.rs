@@ -287,12 +287,11 @@ impl Map {
                 if self.is_edge(x, y) {
                     for angle_index in 0..NUM_ANGLES {
                         let angle = angle_index as f32 * ANGLE_STEP as f32;
-                        let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()).abs() / DISTANCE_STEP as f32;
+                        let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()) as f32;
                         if (distance as i32) >= MIN_DISTANCE && (distance as i32) < MAX_DISTANCE {
-                            println!("distance: {:?}", distance);
                             let distance_index = (distance as i32 - MIN_DISTANCE) as usize / DISTANCE_STEP;
-                            /*println!("angle: {:?}, angle_index: {:?}, distance: {:?}, distance_index: {:?}",
-                                    angle, angle_index, distance, distance_index);*/
+                            println!("x: {:?}, y: {:?}, distance: {:?}, angle: {:?} -> angle_index: {:?}, distance_index: {:?}",
+                                    x, y, distance, angle, angle_index, distance_index);
                             accumulator[angle_index][distance_index] += 1;
                         }
                     }
@@ -436,3 +435,87 @@ impl Map {
         // Logic to filter out irrelevant lines
     }*/
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hough_transform() {
+        // Set up a Map with known lines
+        let mut map = Map::new();
+        // Populate `map` with data that forms clear, detectable lines
+        for y in 0..map.height {
+            for x in 0..map.width {
+                let i = (y * map.width + x) as usize;
+                // This should create a 100 long vertical line and a 150 long
+                // horizontal line
+                if y < (150.0 / map.tile_wh) as u32 &&
+                        x < (100.0 / map.tile_wh) as u32{
+                    map.data[i] = -100.0;
+                } else {
+                    map.data[i] = 100.0;
+                }
+            }
+        }
+
+        map.print(Point2::new(0.0, 0.0));
+
+        // Perform the Hough Transform
+        let lines = map.hough_transform();
+
+        for line in &lines {
+            println!("HoughLine: angle={:?} distance={:?} votes={:?}",
+                    line.angle, line.distance, line.votes);
+        }
+
+        // The longest line is the 150 long horizontal line (= angle 0), at
+        // Y=100 (= distance 100)
+        assert_eq!(lines[0].angle, 0.0);
+        assert_eq!(lines[0].distance, 100.0 / map.tile_wh);
+
+        // The second longest line is the 100 long vertical line (= angle 90),
+        // at X=150 (= distance 150)
+        assert_eq!(lines[1].angle, 90.0);
+        assert_eq!(lines[1].distance, 150.0 / map.tile_wh);
+        assert!(lines[0].votes > lines[1].votes);
+
+        // Set up a Map with known lines
+        let mut map = Map::new();
+        // Populate `map` with data that forms clear, detectable lines
+        for y in 0..map.height {
+            for x in 0..map.width {
+                let i = (y * map.width + x) as usize;
+                // This should create a diagonal line 200/sqrt(2) away from
+                // origin
+                if y + x < (200.0 / map.tile_wh) as u32 {
+                    map.data[i] = -100.0;
+                } else {
+                    map.data[i] = 100.0;
+                }
+            }
+        }
+
+        map.print(Point2::new(0.0, 0.0));
+
+        // Perform the Hough Transform
+        let lines = map.hough_transform();
+
+        for line in &lines {
+            println!("HoughLine: angle={:?} distance={:?} votes={:?}",
+                    line.angle, line.distance, line.votes);
+        }
+
+        // Ideally we would get a 45 degree line at 141.42 / map.tile_wh
+        // distance, but instead we get 40 and 50 degree lines at distances
+        // close to this one
+        for i in 0..4 {
+            assert!((lines[i].angle - 45.0).abs() <= 5.0);
+            assert!((lines[i].distance - 141.42 / map.tile_wh).abs() <= 2.5);
+            if i != 3 {
+                assert_eq!(lines[i].votes, lines[i+1].votes);
+            }
+        }
+    }
+}
+
