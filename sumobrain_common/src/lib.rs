@@ -306,6 +306,9 @@ impl BrainState {
         // Modulate motor speeds a bit to generate better sensor data
         wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
 
+        // TODO: Remove or replace
+        wanted_rotation_speed = self.steer_towards_absolute_angle(PI*0.5, PI*2.0);
+
         let track = robot.get_track_width();
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
         let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
@@ -325,5 +328,17 @@ impl BrainState {
         robot.set_weapon_throttle(weapon_throttle);
 
         self.counter += 1;
+    }
+
+    // Returns a value suitable for wanted_rotation_speed
+    pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32, rotation_speed: f32) -> f32 {
+        let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
+        println!("angle_diff: {:?}", angle_diff);
+        let speed_factor = 0.1 + (angle_diff.abs() / PI * 0.9);
+        if angle_diff > 0.0 {
+            return speed_factor * rotation_speed;
+        } else {
+            return speed_factor * -rotation_speed;
+        }
     }
 }
