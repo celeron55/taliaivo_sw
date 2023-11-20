@@ -346,6 +346,28 @@ impl Robot {
                     g);
             }
         }
+        let p = self.diagnostic_robot_p;
+        let r = self.diagnostic_robot_r;
+        /*rectangle([0.2, 0.8, 0.8, 1.0],
+                [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
+                transform
+                    .trans(200.0, 10.0)
+                    .trans(tile_size * p.x as f64 / map.tile_wh as f64,
+                            tile_size * p.y as f64 / map.tile_wh as f64)
+                    .rot_rad(r as f64),
+                g);*/
+        polygon([0.2, 0.8, 0.8, 1.0],
+                &[
+                    [tile_size * 0.6, 0.0],
+                    [-tile_size * 0.6, -tile_size * 0.5],
+                    [-tile_size * 0.6,  tile_size * 0.5],
+                ],
+                transform
+                    .trans(200.0, 10.0)
+                    .trans(tile_size * p.x as f64 / map.tile_wh as f64,
+                            tile_size * p.y as f64 / map.tile_wh as f64)
+                    .rot_rad(r as f64),
+                g);
     }
 }
 
@@ -423,10 +445,10 @@ fn main() {
                         (GROUP_ENEMY).into(),
                         (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
     ];
-    /*robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+    robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
             10.0, 2.0, 0.0, point![0.0, 4.0],
             InteractionGroups::new(
-                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));*/
+                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
 
     let asize = 150.0;
     let ad = 10.0;

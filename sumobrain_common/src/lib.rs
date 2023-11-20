@@ -204,8 +204,8 @@ impl BrainState {
         let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
         println!("gyro_z: {:?}", gyro_z);
 
-        let s = 30.0;
-        let dur = 10;
+        let s = 60.0;
+        let dur = 6;
         let mut wheel_speed_left = {
             let mut speed = s;
             if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
@@ -227,51 +227,47 @@ impl BrainState {
 
         self.map.global_forget(0.998);
 
+        if gyro_z.abs() > 5.0 {
+            self.map.global_forget(0.9);
+        }
+
         for reading in &proximity_sensor_readings {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
         robot.report_map(&self.map, self.pos, self.rot);
 
-        // Assume the first 3 sensors are pointing somewhat forward and if they
-        // all are showing short distance, don't try to push further
-        // TODO: Make an exception when it has been determined that we are
-        // pushing against the opponent instead of a wall
-        if proximity_sensor_readings.len() > 2 {
+        if proximity_sensor_readings.len() >= 6 {
             let d0 = proximity_sensor_readings[0].1;
             let d1 = proximity_sensor_readings[1].1;
             let d2 = proximity_sensor_readings[2].1;
+            let d3 = proximity_sensor_readings[3].1;
+            let d4 = proximity_sensor_readings[4].1;
+            let d5 = proximity_sensor_readings[5].1;
+            // Assume the first 3 sensors are pointing somewhat forward and if they
+            // all are showing short distance, don't try to push further
+            // TODO: Make an exception when it has been determined that we are
+            // pushing against the opponent instead of a wall
             if d0 < 10.0 && d1 < 15.0 && d2 < 15.0 {
                 wheel_speed_left = -10.0;
                 wheel_speed_right = -5.0;
             }
-        }
-        // Assume sensor [5] is pointing rearwards. Don't try to reverse more if
-        // it's detecting something.
-        if proximity_sensor_readings.len() > 5 {
-            let d5 = proximity_sensor_readings[5].1;
+            // Assume sensor [5] is pointing rearwards. Don't try to reverse more if
+            // it's detecting something.
             if d5 < 10.0 {
                 wheel_speed_left = 5.0;
                 wheel_speed_right = 5.0;
             }
+            // Try to steer away from walls on the sides
+            if d3 < 10.0 && d0 > 30.0 {
+                wheel_speed_left = 15.0;
+                wheel_speed_right = 30.0;
+            }
+            if d4 < 10.0 && d0 > 30.0 {
+                wheel_speed_left = 30.0;
+                wheel_speed_right = 15.0;
+            }
         }
-
-        /*if proximity_sensor_readings.len() >= 6 {
-            {
-                let distance = proximity_sensor_readings[0].1;
-                if distance < 20.0 {
-                    wheel_speed_left = -10.0;
-                    wheel_speed_right = -5.0;
-                }
-            }
-            {
-                let distance = proximity_sensor_readings[5].1;
-                if distance < 20.0 {
-                    wheel_speed_left = 50.0;
-                    wheel_speed_right = 50.0;
-                }
-            }
-        }*/
 
         // TODO: Limit wheel speed changes, i.e. limit acceleration
 
@@ -282,7 +278,7 @@ impl BrainState {
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
 
         let mut weapon_throttle = 100.0;
-        if gyro_z.abs() > 1.5 {
+        if gyro_z.abs() > 5.0 {
             weapon_throttle = 0.0;
         }
         robot.set_weapon_throttle(weapon_throttle);
