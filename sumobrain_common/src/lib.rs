@@ -166,6 +166,42 @@ impl Map {
             println!(); // New line at the end of each row
         }
     }
+
+    pub fn find_pattern(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32)
+            -> Option<(u32, u32)> {
+        let mut best_match = None;
+        let mut best_score = f32::MAX;
+
+        for y in 0..self.height.saturating_sub(pattern_height) {
+            for x in 0..self.width.saturating_sub(pattern_width) {
+                let score = self.calculate_match_score(x, y, pattern, pattern_width, pattern_height);
+                if score < best_score {
+                    best_score = score;
+                    best_match = Some((x, y));
+                }
+            }
+        }
+
+        best_match
+    }
+
+    fn calculate_match_score(&self, x: u32, y: u32, pattern: &[f32], pattern_width: u32,
+            pattern_height: u32) -> f32 {
+        let mut score = 0.0;
+
+        for pattern_y in 0..pattern_height {
+            for pattern_x in 0..pattern_width {
+                let map_x = x + pattern_x;
+                let map_y = y + pattern_y;
+                let map_idx = (map_y * self.width + map_x) as usize;
+                let pattern_idx = (pattern_y * pattern_width + pattern_x) as usize;
+
+                score += (self.data[map_idx] - pattern[pattern_idx]).abs();
+            }
+        }
+
+        score
+    }
 }
 
 fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
@@ -347,9 +383,38 @@ impl BrainState {
     }
 
     pub fn create_scanning_motion(&self) -> (f32, f32) {
-        // TODO: Find a good spot on the map to investigate
-        // TODO: self.drive_towards_absolute_position towards that spot
-        // TODO: Apply very strong motor speed modulation to get scanning data
+        // Find a good spot on the map to investigate
+        // TODO: Somehow fill in the behinds of walls on the map in such a way
+        //       that the robot doesn't see them as places where it can go
+        let pattern_w: u32 = 7;
+        let pattern_h: u32 = 7;
+        let pattern = [
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+            -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
+        ];
+        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h);
+        if let Some(result) = result_maybe {
+            // Target the center of the pattern
+            let target_p = Point2::new(
+                (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
+                (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
+            );
+            //println!("target_p: {:?}", target_p);
+            // Drive towards that spot
+            let max_linear_speed = 50.0;
+            let max_rotation_speed = PI * 2.0;
+            let (mut wanted_linear_speed, mut wanted_rotation_speed) =
+                        self.drive_towards_absolute_position(
+                            target_p, max_linear_speed, max_rotation_speed);
+            // Apply very strong motor speed modulation to get scanning data
+            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 7.0).sin() * 2.0;
+            return (wanted_linear_speed, wanted_rotation_speed);
+        }
         let wanted_linear_speed = 100.0;
         let wanted_rotation_speed = PI * 1.0;
         return (wanted_linear_speed, wanted_rotation_speed);
