@@ -190,6 +190,7 @@ pub struct BrainState {
     vel: Vector2<f32>, // Velocity of robot on map
     applied_wheel_speed_left: f32,
     applied_wheel_speed_right: f32,
+    proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
 }
 
 impl BrainState {
@@ -202,6 +203,7 @@ impl BrainState {
             vel: Vector2::new(0.0, 0.0),
             applied_wheel_speed_left: 0.0,
             applied_wheel_speed_right: 0.0,
+            proximity_sensor_readings: ArrayVec::new(),
         }
     }
 
@@ -244,9 +246,9 @@ impl BrainState {
         self.pos.x += self.vel.x / UPS as f32;
         self.pos.y += self.vel.y / UPS as f32;
 
-        let proximity_sensor_readings = robot.get_proximity_sensors();
+        self.proximity_sensor_readings = robot.get_proximity_sensors();
 
-        //println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
+        //println!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
 
         self.map.global_forget(0.998);
 
@@ -254,7 +256,7 @@ impl BrainState {
             self.map.global_forget(0.9);
         }
 
-        for reading in &proximity_sensor_readings {
+        for reading in &self.proximity_sensor_readings {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
@@ -273,13 +275,13 @@ impl BrainState {
         }
 
         // TODO: Remove
-        if proximity_sensor_readings.len() >= 6 {
-            let d0 = proximity_sensor_readings[0].1;
-            let d1 = proximity_sensor_readings[1].1;
-            let d2 = proximity_sensor_readings[2].1;
-            let d3 = proximity_sensor_readings[3].1;
-            let d4 = proximity_sensor_readings[4].1;
-            let d5 = proximity_sensor_readings[5].1;
+        if self.proximity_sensor_readings.len() >= 6 {
+            let d0 = self.proximity_sensor_readings[0].1;
+            let d1 = self.proximity_sensor_readings[1].1;
+            let d2 = self.proximity_sensor_readings[2].1;
+            let d3 = self.proximity_sensor_readings[3].1;
+            let d4 = self.proximity_sensor_readings[4].1;
+            let d5 = self.proximity_sensor_readings[5].1;
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
             // TODO: Make an exception when it has been determined that we are
@@ -345,15 +347,17 @@ impl BrainState {
     }
 
     pub fn create_scanning_motion(&self) -> (f32, f32) {
-        // TODO: Try to still avoid walls
-        let wanted_linear_speed = 50.0;
-        let wanted_rotation_speed = PI * 2.0;
+        // TODO: Find a good spot on the map to investigate
+        // TODO: self.drive_towards_absolute_position towards that spot
+        // TODO: Apply very strong motor speed modulation to get scanning data
+        let wanted_linear_speed = 100.0;
+        let wanted_rotation_speed = PI * 1.0;
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
     pub fn create_safety_motion(&self) -> (f32, f32) {
         // TODO: Try to avoid walls
-        let max_linear_speed = 100.0;
+        let max_linear_speed = 50.0;
         let max_rotation_speed = PI * 2.0;
         // TODO: Find a good target_p on map
         let target_p = Point2::new(100.0, 100.0);
