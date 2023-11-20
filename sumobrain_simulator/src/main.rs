@@ -35,6 +35,7 @@ struct Robot {
     diagnostic_robot_r: f32,
     diagnostic_attack_p: Option<Point2<f32>>,
     diagnostic_scan_p: Option<Point2<f32>>,
+    interaction_groups: InteractionGroups,
 }
 
 struct ArenaWall {
@@ -136,6 +137,7 @@ impl Robot {
             diagnostic_robot_r: 0.0,
             diagnostic_attack_p: None,
             diagnostic_scan_p: None,
+            interaction_groups: interaction_groups,
         }
     }
 
@@ -321,8 +323,7 @@ impl Robot {
                 let shape_vel: Vector2<f32> = rotation * Vector2::new(0.0, 1.0);
                 let max_toi = max_detection_distance;
                 let stop_at_penetration = true;
-                let filter = QueryFilter::new().groups(InteractionGroups::new(
-                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
+                let filter = QueryFilter::new().groups(self.interaction_groups);
 
                 if let Some((handle, hit)) = query_pipeline.cast_shape(
                     &rigid_body_set, &collider_set, &shape_pos, &shape_vel, &shape, max_toi, stop_at_penetration, filter
@@ -339,8 +340,7 @@ impl Robot {
 		}
     }
 
-    fn draw_map(&self, c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2]) {
-        let tile_size: f64 = 3.0;
+    fn draw_map(&self, c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2], tile_size: f64) {
         let map = &self.diagnostic_map;
         for y in 0..map.height {
             for x in 0..map.width {
@@ -361,14 +361,6 @@ impl Robot {
 
         let p = self.diagnostic_robot_p;
         let r = self.diagnostic_robot_r;
-        /*rectangle([0.2, 0.8, 0.8, 1.0],
-                [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
-                transform
-                    .trans(200.0, 10.0)
-                    .trans(tile_size * p.x as f64 / map.tile_wh as f64,
-                            tile_size * p.y as f64 / map.tile_wh as f64)
-                    .rot_rad(r as f64),
-                g);*/
         polygon([0.2, 0.8, 0.8, 1.0],
                 &[
                     [tile_size * 0.6, 0.0],
@@ -477,7 +469,7 @@ fn main() {
                 120.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ENEMY).into(),
-                        (GROUP_ENEMY | GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
+                        (GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
     ];
     robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
             10.0, 2.0, 0.0, point![0.0, 4.0],
@@ -496,6 +488,7 @@ fn main() {
     ];
 
     let mut brain = BrainState::new();
+    let mut brain2 = BrainState::new();
 
     let mut counter: u64 = 0;
 
@@ -527,12 +520,15 @@ fn main() {
                             .rot_rad(PI * 0.25),
                           g);
 
-                robots[0].draw_map(&c, g, &transform);
+                robots[0].draw_map(&c, g, &transform, 2.5);
+                let transform2 = transform.trans(0.0, 110.0);
+                robots[1].draw_map(&c, g, &transform2, 1.0);
             });
         }
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
+            brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
