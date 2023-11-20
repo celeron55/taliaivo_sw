@@ -17,10 +17,11 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 20; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
-const GROUP_EGO: u32 = 0b0001;
-const GROUP_ENEMY: u32 = 0b0010;
-const GROUP_BLADE: u32 = 0b0100; 
-const GROUP_ARENA: u32 = 0b1000; 
+const GROUP_ARENA:         u32 = 0b00001000;
+const GROUP_ROBOT0_BODY:   u32 = 0b00000001;
+const GROUP_ROBOT1_BODY:   u32 = 0b00000010;
+const GROUP_ROBOT0_WEAPON: u32 = 0b00000100;
+const GROUP_ROBOT1_WEAPON: u32 = 0b00010000;
 
 struct Robot {
     body_handle: RigidBodyHandle,
@@ -406,7 +407,9 @@ impl ArenaWall {
             .build();
         let wall_collider = ColliderBuilder::cuboid(width / 2.0, height / 2.0)
             .collision_groups(InteractionGroups::new(
-                    (GROUP_ARENA).into(), (GROUP_ENEMY | GROUP_EGO | GROUP_BLADE).into()))
+                    (GROUP_ARENA).into(),
+                    (GROUP_ROBOT0_BODY | GROUP_ROBOT1_BODY |
+                        GROUP_ROBOT0_WEAPON | GROUP_ROBOT1_WEAPON).into()))
             .build();
         let wall_handle = rigid_body_set.insert(wall_rigid_body);
         collider_set.insert_with_parent(wall_collider, wall_handle, rigid_body_set);
@@ -466,17 +469,22 @@ fn main() {
         Robot::new(&mut rigid_body_set, &mut collider_set,
                 100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
-                        (GROUP_EGO).into(), (GROUP_ENEMY | GROUP_ARENA).into())),
+                        (GROUP_ROBOT0_BODY).into(),
+                        (GROUP_ARENA | GROUP_ROBOT1_BODY | GROUP_ROBOT1_WEAPON).into())),
         Robot::new(&mut rigid_body_set, &mut collider_set,
                 120.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
-                        (GROUP_ENEMY).into(),
-                        (GROUP_ARENA | GROUP_BLADE | GROUP_EGO).into())),
+                        (GROUP_ROBOT1_BODY).into(),
+                        (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())),
     ];
     robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
             10.0, 2.0, 0.0, point![0.0, 4.0],
             InteractionGroups::new(
-                    (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
+                    (GROUP_ROBOT0_WEAPON).into(), (GROUP_ROBOT1_BODY | GROUP_ARENA).into()));
+    robots[1].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+            8.0, 1.5, 0.0, point![0.0, 3.0],
+            InteractionGroups::new(
+                    (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
 
     let asize = 150.0;
     let ad = 10.0;
