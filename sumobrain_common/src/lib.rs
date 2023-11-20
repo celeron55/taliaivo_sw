@@ -167,17 +167,19 @@ impl Map {
         }
     }
 
-    pub fn find_pattern(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32)
-            -> Option<(u32, u32)> {
+    pub fn find_pattern(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32,
+            ignore_map_below_significance: f32, score_for_ignore: f32)
+            -> Option<(u32, u32, f32)> {
         let mut best_match = None;
         let mut best_score = f32::MAX;
 
         for y in 0..self.height.saturating_sub(pattern_height) {
             for x in 0..self.width.saturating_sub(pattern_width) {
-                let score = self.calculate_match_score(x, y, pattern, pattern_width, pattern_height);
+                let score = self.calculate_match_score(x, y, pattern, pattern_width, pattern_height,
+                        ignore_map_below_significance, score_for_ignore);
                 if score < best_score {
                     best_score = score;
-                    best_match = Some((x, y));
+                    best_match = Some((x, y, score));
                 }
             }
         }
@@ -186,7 +188,7 @@ impl Map {
     }
 
     fn calculate_match_score(&self, x: u32, y: u32, pattern: &[f32], pattern_width: u32,
-            pattern_height: u32) -> f32 {
+            pattern_height: u32, ignore_map_below_significance: f32, score_for_ignore: f32) -> f32 {
         let mut score = 0.0;
 
         for pattern_y in 0..pattern_height {
@@ -196,7 +198,11 @@ impl Map {
                 let map_idx = (map_y * self.width + map_x) as usize;
                 let pattern_idx = (pattern_y * pattern_width + pattern_x) as usize;
 
-                score += (self.data[map_idx] - pattern[pattern_idx]).abs();
+                if self.data[map_idx].abs() >= ignore_map_below_significance {
+                    score += (self.data[map_idx] - pattern[pattern_idx]).abs();
+                } else {
+                    score += score_for_ignore;
+                }
             }
         }
 
@@ -377,6 +383,32 @@ impl BrainState {
     }
 
     pub fn create_motion(&self) -> (f32, f32) {
+        // See if the enemy can be reasonably found on the map
+        let pattern_w: u32 = 4;
+        let pattern_h: u32 = 4;
+        let pattern = [
+            -100.0, -100.0, -100.0, -100.0,
+            -100.0,  100.0,  100.0, -100.0,
+            -100.0,  100.0,  100.0, -100.0,
+            -100.0, -100.0, -100.0, -100.0,
+        ];
+        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 30.0, 50.0);
+        if let Some(result) = result_maybe {
+            let score = result.2;
+            println!("score: {:?}", score);
+            if score < 25.0 * pattern_w as f32 * pattern_h as f32 {
+                // Target the center of the pattern
+                let target_p = Point2::new(
+                    (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
+                    (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
+                );
+                //println!("target_p: {:?}", target_p);
+                println!("attack {:?}", target_p);
+                return self.create_attack_motion(target_p);
+            }
+        }
+
+        println!("scan");
         return self.create_scanning_motion();
         //return self.create_safety_motion();
         //return self.create_attack_motion();
@@ -385,7 +417,9 @@ impl BrainState {
     pub fn create_scanning_motion(&self) -> (f32, f32) {
         // Find a good spot on the map to investigate
         // TODO: Somehow fill in the behinds of walls on the map in such a way
-        //       that the robot doesn't see them as places where it can go
+        //       that the robot doesn't see them as places where it can go, or
+        //       in some other way make it so that the robot doesn't try to
+        //       drive through walls
         let pattern_w: u32 = 7;
         let pattern_h: u32 = 7;
         let pattern = [
@@ -397,7 +431,7 @@ impl BrainState {
             -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
             -20.0, -20.0, -20.0, -20.0, -20.0, -20.0, -20.0,
         ];
-        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h);
+        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 0.0, 0.0);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
@@ -434,17 +468,19 @@ impl BrainState {
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
-    pub fn create_attack_motion(&self) -> (f32, f32) {
-        // TODO: Try to avoid walls
-        let max_linear_speed = 50.0;
-        let max_rotation_speed = PI * 3.0;
-        // TODO: Find a good target_p on map
-        let target_p = Point2::new(100.0, 100.0);
+    pub fn create_attack_motion(&self, target_p: Point2<f32>) -> (f32, f32) {
+        // Drive towards target
+        let max_linear_speed = 100.0;
+        let max_rotation_speed = PI * 4.0;
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
-                self.drive_towards_absolute_position(
-                    target_p, max_linear_speed, max_rotation_speed);
-        // Modulate motor speeds a bit to generate better sensor data
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+                    self.drive_towards_absolute_position(
+                        target_p, max_linear_speed, max_rotation_speed);
+        // Apply some motor speed modulation to get scanning data
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 4.0).sin() * 1.0;
+        // Revert linear speed at an interval to allow the weapon to spin up
+        if (self.counter % (UPS * 4)) < (UPS * 1) {
+            wanted_linear_speed *= -1.0;
+        }
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
