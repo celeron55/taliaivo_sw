@@ -40,6 +40,11 @@ struct ArenaWall {
 }
 
 impl RobotInterface for Robot {
+    // Capabilities and dimensions
+    fn get_track_width(&self) -> f32 {
+        return self.right_wheel_position.x - self.left_wheel_position.x;
+    }
+
     // Motor control
     fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32) {
         self.wheel_speed_left = left_speed_cm_s;

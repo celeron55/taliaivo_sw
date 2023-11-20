@@ -8,6 +8,9 @@ use nalgebra::{Vector2, Point2, UnitComplex};
 use core::f32::consts::PI;
 
 pub trait RobotInterface {
+    // Capabilities and dimensions
+    fn get_track_width(&self) -> f32;
+
     // Motor control
     fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32);
     
@@ -241,22 +244,16 @@ impl BrainState {
         self.pos.x += self.vel.x / UPS as f32;
         self.pos.y += self.vel.y / UPS as f32;
 
+        let mut wanted_linear_speed = 0.0;
+        let mut wanted_rotation_speed = 0.0;
+
         let s = 60.0;
         let dur = 6;
-        let mut wheel_speed_left = {
-            let mut speed = s;
-            if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
-                speed = -s;
-            }
-            speed
-        };
-        let mut wheel_speed_right = {
-            let mut speed = s;
-            if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
-                speed = -s;
-            }
-            speed
-        };
+        if (self.counter % (UPS * dur)) < (UPS * dur / 2) {
+            wanted_linear_speed = -s;
+        } else {
+            wanted_linear_speed = s;
+        }
 
         let proximity_sensor_readings = robot.get_proximity_sensors();
 
@@ -286,35 +283,38 @@ impl BrainState {
             // TODO: Make an exception when it has been determined that we are
             // pushing against the opponent instead of a wall
             if d0 < 10.0 && d1 < 15.0 && d2 < 15.0 {
-                wheel_speed_left = -10.0;
-                wheel_speed_right = -5.0;
+                wanted_linear_speed = -5.0;
+                wanted_rotation_speed = 1.0;
             }
             // Assume sensor [5] is pointing rearwards. Don't try to reverse more if
             // it's detecting something.
             if d5 < 10.0 {
-                wheel_speed_left = 5.0;
-                wheel_speed_right = 5.0;
+                wanted_linear_speed = 5.0;
+                wanted_rotation_speed = 0.0;
             }
             // Try to steer away from walls on the sides
             if d3 < 10.0 && d0 > 30.0 {
-                wheel_speed_left = 15.0;
-                wheel_speed_right = 30.0;
+                wanted_linear_speed = 22.25;
+                wanted_rotation_speed = 1.0;
             }
             if d4 < 10.0 && d0 > 30.0 {
-                wheel_speed_left = 30.0;
-                wheel_speed_right = 15.0;
+                wanted_linear_speed = 22.25;
+                wanted_rotation_speed = -1.0;
             }
         }
 
         // Modulate motor speeds a bit to generate better sensor data
-        wheel_speed_left += (self.counter as f32 / UPS as f32 * 10.0).sin() * 5.0;
-        wheel_speed_right += (self.counter as f32 / UPS as f32 * 10.0 + PI).sin() * 5.0;
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+
+        let track = robot.get_track_width();
+        let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
+        let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
 
         // Limit wheel speed changes, i.e. limit acceleration
         self.applied_wheel_speed_left = limit_acceleration(self.applied_wheel_speed_left,
-                wheel_speed_left, 250.0 / UPS as f32);
+                wanted_wheel_speed_left, 250.0 / UPS as f32);
         self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
-                wheel_speed_right, 250.0 / UPS as f32);
+                wanted_wheel_speed_right, 250.0 / UPS as f32);
 
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 
