@@ -228,15 +228,14 @@ impl Map {
     }
 }
 
-const MIN_DISTANCE: i32 = 0;
 const MAX_DISTANCE: i32 = MAP_W as i32;
 const DISTANCE_STEP: usize = 2; // Distance resolution
 const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
-const NUM_DISTANCES: usize = (MAX_DISTANCE - MIN_DISTANCE) as usize / DISTANCE_STEP;
+const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
-const HOUGH_THRESHOLD: usize = 12;
-const MAX_NUM_LINE_CANDIDATES: usize = 100;
+const HOUGH_THRESHOLD: usize = 13;
+const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
 const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
 const EDGE_MIN_POS: f32 = 40.0;
@@ -291,8 +290,9 @@ impl Map {
                     for angle_index in 0..NUM_ANGLES {
                         let angle = angle_index as f32 * ANGLE_STEP as f32;
                         let distance = (x as f32 * angle.to_radians().cos() + y as f32 * angle.to_radians().sin()) as f32;
-                        if (distance as i32) >= MIN_DISTANCE && (distance as i32) < MAX_DISTANCE {
-                            let distance_index = (distance as i32 - MIN_DISTANCE) as usize / DISTANCE_STEP;
+                        let distance_index = distance as usize / DISTANCE_STEP;
+                        if distance >= 0.0 && distance < MAX_DISTANCE as f32 &&
+                                distance_index < NUM_DISTANCES {
                            /* println!("x: {:?}, y: {:?}, distance: {:?}, angle: {:?} -> angle_index: {:?}, distance_index: {:?}",
                                     x, y, distance, angle, angle_index, distance_index);*/
                             accumulator[angle_index][distance_index] += 1;
@@ -346,7 +346,8 @@ impl Map {
                 //println!("votes: {:?}", votes);
                 if votes as usize >= HOUGH_THRESHOLD {
                     let angle = angle_index as f32 * ANGLE_STEP as f32;
-                    let distance = distance_index as f32 * DISTANCE_STEP as f32 + MIN_DISTANCE as f32 + DISTANCE_STEP as f32 / 2.0;
+                    let distance = distance_index as f32 * DISTANCE_STEP as f32 +
+                            DISTANCE_STEP as f32 / 2.0;
                     // TODO: Maybe care about the result of the try_push
                     line_candidates.try_push(HoughLine::new(angle, distance, votes.into()));
                 }
