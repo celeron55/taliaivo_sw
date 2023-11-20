@@ -11,7 +11,7 @@ use sumobrain_common::{RobotInterface, BrainState};
 use arrayvec::ArrayVec;
 
 const FPS: u64 = 120;
-const UPS: u64 = 120;
+const UPS: u64 = sumobrain_common::UPS;
 const DT: f32 = 1.0 / UPS as f32;
 
 const GROUP_EGO: u32 = 0b0001;
@@ -356,7 +356,7 @@ impl ArenaWall {
     }
 }
 fn main() {
-    let mut window: PistonWindow = WindowSettings::new("Sumobrain Simulator", [800, 600])
+    let mut window: PistonWindow = WindowSettings::new("Sumobrain Simulator", [1200, 600])
         .exit_on_esc(true)
         .build()
         .unwrap();
@@ -403,11 +403,14 @@ fn main() {
             InteractionGroups::new(
                     (GROUP_BLADE).into(), (GROUP_ENEMY | GROUP_ARENA).into()));
 
+    let asize = 150.0;
+    let ad = 10.0;
+    let at = 5.0;
     let arena_walls = vec![
-        ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 10.0, 180.0, 5.0),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 10.0, 100.0, 5.0, 180.0),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 190.0, 100.0, 5.0, 180.0),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, 100.0, 190.0, 180.0, 5.0),
+        ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad, asize, at),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad, ad+asize/2.0, at, asize),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize, ad+asize/2.0, at, asize),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
         // Repeat for other walls
     ];
 
@@ -421,7 +424,7 @@ fn main() {
                 clear([0.1; 4], g);
 
                 let transform = c.transform
-                    .zoom(2.5)
+                    .zoom(3.5)
                     .trans(0.0, 0.0);
                     //.rot_rad(PI)
                     //.trans(-200.0, -200.0);

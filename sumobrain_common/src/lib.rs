@@ -31,7 +31,7 @@ pub trait RobotInterface {
     fn report_position_on_map(&mut self, x: f32, y: f32);
 }
 
-const UPS: u64 = 100; // Updates per second
+pub const UPS: u64 = 100; // Updates per second
 const MAP_T: f32 = 5.0; // Map tile width and height in cm
 const MAP_W_REAL: f32 = 200.0; // Map width in cm
 const MAP_H_REAL: f32 = MAP_W_REAL;
@@ -155,16 +155,16 @@ impl BrainState {
         println!("gyro_z: {:?}", gyro_z);
 
         let mut wheel_speed_left = {
-            let mut speed = 100.0;
-            if (self.counter % (UPS * 6)) < (UPS * 3) {
-                speed = -100.0;
+            let mut speed = 150.0;
+            if (self.counter % (UPS * 10)) < (UPS * 5) {
+                speed = -150.0;
             }
             speed
         };
         let mut wheel_speed_right = {
-            let mut speed = 100.0;
-            if (self.counter % (UPS * 6)) < (UPS * 3) {
-                speed = -100.0;
+            let mut speed = 150.0;
+            if (self.counter % (UPS * 10)) < (UPS * 5) {
+                speed = -150.0;
             }
             speed
         };
