@@ -4,18 +4,7 @@ extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
 use libc_print::std_name::{println, eprintln, print, dbg};
-
-#[derive(Copy, Clone)]
-pub struct Vf {
-    x: f32,
-    y: f32,
-}
-
-impl Vf {
-    pub fn new(x: f32, y: f32) -> Self {
-        Vf { x: x, y: y }
-    }
-}
+use nalgebra::{Vector2, Point2, UnitComplex};
 
 pub trait RobotInterface {
     // Motor control
@@ -75,14 +64,11 @@ impl Map {
 
     // something_seen: If nothing is found within sensor range, set this to
     // true, and set distance to the sensor maximum range
-    pub fn paint_proximity_reading(&mut self, starting_position: Vf, angle_rad: f32, distance: f32,
+    pub fn paint_proximity_reading(&mut self, starting_position: Point2<f32>, angle_rad: f32, distance: f32,
             something_seen: bool) {
         // Calculate end point of the ray
-        let direction = Vf::new(angle_rad.cos(), angle_rad.sin());
-        let end_point = Vf {
-            x: starting_position.x + distance * direction.x,
-            y: starting_position.y + distance * direction.y,
-        };
+        let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+        let end_point = starting_position + direction * distance;
 
         // Convert to tile indices
         let mut x0 = (starting_position.x / self.tile_wh) as i32;
@@ -137,9 +123,9 @@ impl Map {
 pub struct BrainState {
     counter: u64,
     map: Map,
-    pos: Vf, // Position of robot on map
+    pos: Point2<f32>, // Position of robot on map
     rot: f32, // Angle of robot on map (radians)
-    vel: Vf, // Velocity of robot on map
+    vel: Vector2<f32>, // Velocity of robot on map
 }
 
 impl BrainState {
@@ -147,9 +133,9 @@ impl BrainState {
         BrainState {
             counter: 0,
             map: Map::new(),
-            pos: Vf::new(100.0, 100.0),
+            pos: Point2::new(100.0, 100.0),
             rot: 0.0,
-            vel: Vf::new(0.0, 0.0),
+            vel: Vector2::new(0.0, 0.0),
         }
     }
 
