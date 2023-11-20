@@ -356,8 +356,7 @@ impl Robot {
                         1.0
                     ], 
                     [tile_size * x as f64, tile_size * y as f64, tile_size, tile_size],
-                    transform
-                        .trans(200.0, 10.0),
+                    *transform,
                     g);
             }
         }
@@ -371,7 +370,6 @@ impl Robot {
                     [-tile_size * 0.6,  tile_size * 0.5],
                 ],
                 transform
-                    .trans(200.0, 10.0)
                     .trans(tile_size * p.x as f64 / map.tile_wh as f64,
                             tile_size * p.y as f64 / map.tile_wh as f64)
                     .rot_rad(r as f64),
@@ -381,7 +379,6 @@ impl Robot {
             rectangle([0.8, 0.2, 0.2, 1.0],
                     [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
                     transform
-                        .trans(200.0, 10.0)
                         .trans(tile_size * p.x as f64 / map.tile_wh as f64,
                                 tile_size * p.y as f64 / map.tile_wh as f64)
                         .rot_rad(r as f64),
@@ -391,7 +388,6 @@ impl Robot {
             rectangle([0.2, 0.8, 0.2, 1.0],
                     [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
                     transform
-                        .trans(200.0, 10.0)
                         .trans(tile_size * p.x as f64 / map.tile_wh as f64,
                                 tile_size * p.y as f64 / map.tile_wh as f64)
                         .rot_rad(r as f64),
@@ -486,7 +482,7 @@ fn main() {
             InteractionGroups::new(
                     (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
 
-    let asize = 150.0;
+    let asize = 125.0 + 5.0;
     let ad = 10.0;
     let at = 5.0;
     let arena_walls = vec![
@@ -508,7 +504,7 @@ fn main() {
                 clear([0.1; 4], g);
 
                 let transform = c.transform
-                    .zoom(3.5)
+                    .zoom(4.0)
                     .trans(0.0, 0.0);
                     //.rot_rad(PI)
                     //.trans(-200.0, -200.0);
@@ -530,9 +526,10 @@ fn main() {
                             .rot_rad(PI * 0.25),
                           g);
 
-                robots[0].draw_map(&c, g, &transform, 2.5);
-                let transform2 = transform.trans(0.0, 120.0);
-                robots[1].draw_map(&c, g, &transform2, 1.0);
+                let transform1 = transform.trans(180.0, 10.0);
+                robots[0].draw_map(&c, g, &transform1, 2.2);
+                let transform2 = transform1.trans(0.0, 100.0);
+                robots[1].draw_map(&c, g, &transform2, 0.75);
             });
         }
 
