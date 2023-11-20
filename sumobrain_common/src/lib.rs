@@ -148,6 +148,8 @@ impl BrainState {
 
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p, &lines);
 
+        // TODO: Avoid walls as found by hough_transform
+
         let mut wanted_linear_speed = 0.0;
         let mut wanted_rotation_speed = 0.0;
 
