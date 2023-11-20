@@ -101,15 +101,29 @@ impl Map {
         }
     }
 
+    pub fn global_forget(&mut self, factor: f32) {
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let idx = (y * self.width + x) as usize;
+                let tile_value = &mut self.data[idx];
+                *tile_value *= factor;
+            }
+        }
+    }
+
     pub fn print(&self) {
         for y in 0..self.height {
             for x in 0..self.width {
                 let idx = (y * self.width + x) as usize;
                 let tile_value = self.data[idx];
-                let symbol = if tile_value < -10.0 {
+                let symbol = if tile_value < -50.0 {
                     " "
+                } else if tile_value < -10.0 {
+                    "."
                 } else if tile_value < 10.0 {
                     "+"
+                } else if tile_value < 50.0 {
+                    "x"
                 } else {
                     "X"
                 };
@@ -177,6 +191,8 @@ impl BrainState {
         let proximity_sensor_readings = robot.get_proximity_sensors();
 
         println!("proximity_sensor_readings: {:?}", proximity_sensor_readings);
+
+        self.map.global_forget(0.99);
 
         for reading in &proximity_sensor_readings {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
