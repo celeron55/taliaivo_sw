@@ -307,7 +307,10 @@ impl BrainState {
         wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
 
         // TODO: Remove or replace
-        wanted_rotation_speed = self.steer_towards_absolute_angle(PI*0.5, PI*2.0);
+        let wanted_absolute_angle = PI * 0.5;
+        let max_rotation_speed = PI * 2.0;
+        wanted_rotation_speed = self.steer_towards_absolute_angle(
+                wanted_absolute_angle, max_rotation_speed);
 
         let track = robot.get_track_width();
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
