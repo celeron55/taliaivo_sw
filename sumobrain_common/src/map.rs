@@ -235,8 +235,13 @@ const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = (MAX_DISTANCE - MIN_DISTANCE) as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 180 / ANGLE_STEP;
 
+const MAX_NUM_LINE_CANDIDATES: usize = 100;
+const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
+const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
+
 type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
 
+#[derive(Clone)]
 pub struct HoughLine {
     pub angle: f32,
     pub distance: f32,
@@ -251,6 +256,18 @@ impl HoughLine {
             votes: votes,
         }
     }
+    fn default() -> Self {
+        HoughLine {
+            angle: 0.0,
+            distance: 0.0,
+            votes: 0,
+        }
+    }
+}
+
+fn angle_difference(angle1: f32, angle2: f32) -> f32 {
+    let diff = (angle1 - angle2).abs() % 360.0;
+    if diff > 180.0 { 360.0 - diff } else { diff }
 }
 
 impl Map {
@@ -320,10 +337,9 @@ impl Map {
     pub fn detect_lines<F>(&self, accumulator: &Accumulator, mut callback: F)
     where F: FnMut(HoughLine) {
         // TODO: Adjust
-        const MAX_NUM_LINE_CANDIDATES: usize = 100;
         const THRESHOLD: usize = 6;
 
-        let mut line_candidates: ArrayVec<(usize, usize, u16), MAX_NUM_LINE_CANDIDATES> =
+        let mut line_candidates: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> =
                 ArrayVec::new();
 
         // Find peaks in the accumulator
@@ -331,22 +347,90 @@ impl Map {
             for (distance_index, &votes) in distances.iter().enumerate() {
                 //println!("votes: {:?}", votes);
                 if votes as usize >= THRESHOLD { // THRESHOLD is a predefined constant
-                    // TODO: Maybe care about the result
-                    line_candidates.try_push((angle_index, distance_index, votes));
+                    // TODO: Maybe care about the result of the try_push
+                    let angle = angle_index as f32 * ANGLE_STEP as f32;
+                    let distance = distance_index as f32 * DISTANCE_STEP as f32;
+                    line_candidates.try_push(HoughLine::new(angle, distance, votes.into()));
                 }
             }
         }
 
+        line_candidates = self.merge_similar_lines(line_candidates);
+
         // Sort by votes and select top lines
-        line_candidates.sort_by(|a, b| b.2.cmp(&a.2)); // Sort in descending order of votes
+        line_candidates.sort_by(|a, b| b.votes.cmp(&a.votes)); // Sort in descending order of votes
         //line_candidates.truncate(4); // Keep only the top 4 lines
 
         // Invoke the callback for each line
-        for &(angle_index, distance_index, votes) in &line_candidates {
-            let angle = angle_index as f32 * ANGLE_STEP as f32;
-            let distance = distance_index as f32 * DISTANCE_STEP as f32;
-            callback(HoughLine::new(angle, distance, votes.into()))
+        for line in line_candidates {
+            callback(line);
         }
+    }
+
+    fn merge_similar_lines(&self, lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>)
+            -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
+        let mut merged_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
+        let mut used: ArrayVec<bool, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
+        for i in 0..lines.len() {
+            used.push(false);
+        }
+
+        for (i, line) in lines.iter().enumerate() {
+            if used[i] { continue; }
+
+            let mut similar_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
+            similar_lines.push(line.clone());
+            for (j, other_line) in lines.iter().enumerate().skip(i + 1) {
+                if used[j] { continue; }
+
+                if angle_difference(line.angle, other_line.angle) < ANGLE_SIMILARITY_THRESHOLD &&
+                   (line.distance - other_line.distance).abs() < DISTANCE_SIMILARITY_THRESHOLD {
+                    similar_lines.push(other_line.clone());
+                    used[j] = true;
+                }
+            }
+
+            let average_line = similar_lines.iter().fold(HoughLine::default(), |acc, line| {
+                HoughLine {
+                    angle: 0.0, // Cannot be averaged this way
+                    distance: acc.distance + line.distance * line.votes as f32, // Weighed average
+                    votes: acc.votes + line.votes,
+                    // handle other fields if any
+                }
+            });
+
+            let sum_vector = similar_lines.iter().fold(Vector2::new(0.0, 0.0), |acc, line| {
+                let angle_rad = line.angle.to_radians();
+                acc + Vector2::new(angle_rad.cos(), angle_rad.sin())
+            });
+            let average_vector = sum_vector / similar_lines.len() as f32;
+            let average_angle = average_vector.y.atan2(average_vector.x).to_degrees();
+
+            merged_lines.push(HoughLine {
+                angle: average_angle, // TODO: Weighed average
+                distance: average_line.distance / average_line.votes as f32, // Weighed average
+                votes: average_line.votes,
+                // handle other fields if any
+            });
+
+            /*let average_line = similar_lines.iter().fold(HoughLine::default(), |acc, line| {
+                HoughLine {
+                    angle: acc.angle + line.angle,
+                    distance: acc.distance + line.distance,
+                    votes: acc.votes + line.votes,
+                    // handle other fields if any
+                }
+            });
+            
+            merged_lines.push(HoughLine {
+                angle: average_line.angle / similar_lines.len() as f32,
+                distance: average_line.distance / similar_lines.len() as f32,
+                votes: average_line.votes,
+                // handle other fields if any
+            });*/
+        }
+
+        merged_lines
     }
 
     // TODO: Remove
