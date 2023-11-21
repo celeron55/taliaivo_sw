@@ -307,6 +307,43 @@ impl BrainState {
         self.counter += 1;
     }
 
+    pub fn get_wall_safe_linear_speed(&self) -> f32 {
+        if self.proximity_sensor_readings.len() >= 6 {
+            let d0 = self.proximity_sensor_readings[0].1;
+            let d1 = self.proximity_sensor_readings[1].1;
+            let d2 = self.proximity_sensor_readings[2].1;
+            let d3 = self.proximity_sensor_readings[3].1;
+            let d4 = self.proximity_sensor_readings[4].1;
+            let d5 = self.proximity_sensor_readings[5].1;
+            // Assume the first 3 sensors are pointing somewhat forward and if they
+            // all are showing short distance, don't try to push further
+            let mut safe_linear_speed = 100.0;
+            let L = 30.0;
+            let L2 = 20.0;
+            if d0 < L {
+                safe_linear_speed *= 0.5;
+            }
+            if d0 < L2 {
+                safe_linear_speed *= 0.5;
+            }
+            if d1 < L {
+                safe_linear_speed *= 0.8;
+            }
+            if d1 < L2 {
+                safe_linear_speed *= 0.8;
+            }
+            if d2 < L {
+                safe_linear_speed *= 0.8;
+            }
+            if d2 < L2 {
+                safe_linear_speed *= 0.8;
+            }
+            return safe_linear_speed;
+        } else {
+            return 50.0;
+        }
+    }
+
     pub fn create_motion(&mut self) -> (f32, f32) {
         // Reset diagnostic values
         self.attack_p = None;
@@ -403,7 +440,7 @@ impl BrainState {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
             let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
             self.wall_avoid_p = Some(target_p);
-            let max_linear_speed = 50.0;
+            let max_linear_speed = self.get_wall_safe_linear_speed();
             let max_rotation_speed = PI * 3.0;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
@@ -411,8 +448,7 @@ impl BrainState {
             if self.shortest_wall_head_on_distance < 20.0 {
                 wanted_linear_speed = -max_linear_speed * 0.2;
             } else if self.shortest_wall_head_on_distance < 40.0 {
-                //wanted_linear_speed = -max_linear_speed * 0.2;
-                wanted_linear_speed *= 0.05;
+                wanted_linear_speed = max_linear_speed * 0.05;
             }
             // Apply motor speed modulation to get scanning data
             wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
@@ -456,7 +492,7 @@ impl BrainState {
     }
 
     pub fn create_scanning_motion(&mut self) -> (f32, f32) {
-        let max_linear_speed = 50.0;
+        let max_linear_speed = self.get_wall_safe_linear_speed();
         let max_rotation_speed = PI * 2.0;
         // Find a good spot on the map to investigate
         let pattern_w: u32 = 6;
