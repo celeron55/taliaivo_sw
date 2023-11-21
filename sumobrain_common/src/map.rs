@@ -278,7 +278,7 @@ impl HoughLine {
         let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
         
         // Calculate the closest point on the line to the given point
-        let perpendicular_offset = (point.dot(&line_normal) - self.distance).abs();
+        let perpendicular_offset = point.dot(&line_normal) - self.distance;
         let closest_point_on_line = point - line_normal * perpendicular_offset;
 
         // The vector from the point to the closest point on the line
