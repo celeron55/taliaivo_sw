@@ -38,6 +38,7 @@ struct Robot {
     diagnostic_robot_r: f32,
     diagnostic_attack_p: Option<Point2<f32>>,
     diagnostic_scan_p: Option<Point2<f32>>,
+    diagnostic_wall_avoid_p: Option<Point2<f32>>,
     diagnostic_lines: Vec<HoughLine>,
     interaction_groups: InteractionGroups,
 }
@@ -101,13 +102,16 @@ impl RobotInterface for Robot {
 
     // Diagnostic data
     fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32,
-            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>,
+            attack_p: Option<Point2<f32>>,
+            scan_p: Option<Point2<f32>>,
+            wall_avoid_p: Option<Point2<f32>>,
             lines: &[HoughLine]) {
         self.diagnostic_map = map.clone();
         self.diagnostic_robot_p = robot_p;
         self.diagnostic_robot_r = robot_r;
         self.diagnostic_attack_p = attack_p;
         self.diagnostic_scan_p = scan_p;
+        self.diagnostic_wall_avoid_p = wall_avoid_p;
         self.diagnostic_lines = lines.to_vec();
     }
 }
@@ -143,6 +147,7 @@ impl Robot {
             diagnostic_robot_r: 0.0,
             diagnostic_attack_p: None,
             diagnostic_scan_p: None,
+            diagnostic_wall_avoid_p: None,
             diagnostic_lines: Vec::new(),
             interaction_groups: interaction_groups,
         }
@@ -395,6 +400,14 @@ impl Robot {
                                 tile_size * p.y as f64 / map.tile_wh as f64),
                     g);
         }
+        if let Some(p) = self.diagnostic_wall_avoid_p {
+            rectangle([0.2, 0.2, 0.8, 1.0],
+                    [-tile_size/2.0, -tile_size/2.0, tile_size, tile_size],
+                    transform
+                        .trans(tile_size * p.x as f64 / map.tile_wh as f64,
+                                tile_size * p.y as f64 / map.tile_wh as f64),
+                    g);
+        }
 
         //self.diagnostic_map.print(Point2::new(0.0, 0.0));
 
@@ -555,7 +568,7 @@ fn main() {
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            //brain2.update(&mut robots[1]);
+            brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {

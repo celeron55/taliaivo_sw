@@ -2,7 +2,7 @@ extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
 use libc_print::std_name::{println, print};
-use nalgebra::{Vector2, Point2, RealField};
+use nalgebra::{Vector2, Point2};
 
 pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm

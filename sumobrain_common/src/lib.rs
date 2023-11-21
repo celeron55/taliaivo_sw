@@ -34,7 +34,9 @@ pub trait RobotInterface {
 
     // Diagnostic data
     fn report_map(&mut self, map: &Map, robot_p: Point2<f32>, robot_r: f32,
-            attack_p: Option<Point2<f32>>, scan_p: Option<Point2<f32>>,
+            attack_p: Option<Point2<f32>>,
+            scan_p: Option<Point2<f32>>,
+            wall_avoid_p: Option<Point2<f32>>,
             lines: &[HoughLine]);
 }
 
@@ -66,7 +68,11 @@ pub struct BrainState {
     proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
     attack_p: Option<Point2<f32>>, // For diagnostics
     scan_p: Option<Point2<f32>>, // For diagnostics
+    wall_avoid_p: Option<Point2<f32>>, // For diagnostics
     attack_step_count: u32,
+    shortest_wall_head_on_distance: f32,
+    wall_avoidance_vector: Vector2<f32>,
+    shortest_wall_distance: f32,
 }
 
 impl BrainState {
@@ -83,7 +89,11 @@ impl BrainState {
             proximity_sensor_readings: ArrayVec::new(),
             attack_p: None,
             scan_p: None,
+            wall_avoid_p: None,
             attack_step_count: 0,
+            shortest_wall_head_on_distance: f32::MAX,
+            wall_avoidance_vector: Vector2::new(0.0, 0.0),
+            shortest_wall_distance: f32::MAX,
         }
     }
 
@@ -146,20 +156,17 @@ impl BrainState {
                     line.angle, line.distance, line.votes);
         }
 
-        robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p, &lines);
+        robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
+                self.wall_avoid_p, &lines);
 
-        // TODO
-        // Avoid walls as found by hough_transform
+        // TODO: Avoid walls found by hough_transform
+
         let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
         let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
-        let mut shortest_distance: f32 = f32::MAX;
-        // TODO: Instead of or in addition to measuring head-on distance, just
-        //       measure distance from walls to any direction?
-        const AVOID_WALL_HEAD_ON_DISTANCE: f32 = 30.0; // cm
-        const IMPORTANCE_CONSTANT: f32 = 1.0; // tiles
-        let mut wall_avoidance_vector = Vector2::new(0.0, 0.0);
         //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
-        for line in lines {
+
+        self.shortest_wall_head_on_distance = f32::MAX;
+        for line in &lines {
             if let Some(intersection_point_tiles) = calculate_intersection(
                     robot_tile_position, robot_direction_vector, &line) {
                 let distance_tiles = (robot_tile_position - intersection_point_tiles).magnitude();
@@ -167,21 +174,33 @@ impl BrainState {
                         intersection_point_tiles, distance_tiles);*/
                 let distance = distance_tiles * self.map.tile_wh;
                 let intersection_point = intersection_point_tiles * self.map.tile_wh;
-                if distance < shortest_distance {
-                    shortest_distance = distance;
+                if distance < self.shortest_wall_head_on_distance {
+                    self.shortest_wall_head_on_distance = distance;
                 }
             }
+        }
+        if self.shortest_wall_head_on_distance < f32::MAX {
+            println!("Shortest distance to head-on wall collision: {:?}",
+                    self.shortest_wall_head_on_distance);
+        }
 
+        const IMPORTANCE_CONSTANT: f32 = 15.0;
+        self.wall_avoidance_vector = Vector2::new(0.0, 0.0);
+        self.shortest_wall_distance = f32::MAX;
+        for line in &lines {
             let vector_from_wall_to_robot = line.vector_to_point(robot_tile_position);
             let distance_from_line_tiles = vector_from_wall_to_robot.magnitude();
-            let importance = 1.0 / (distance_from_line_tiles + IMPORTANCE_CONSTANT);
-            wall_avoidance_vector += vector_from_wall_to_robot * importance;
+            let importance = 1.0 / (distance_from_line_tiles +
+                    IMPORTANCE_CONSTANT / self.map.tile_wh);
+            self.wall_avoidance_vector += vector_from_wall_to_robot * importance;
+            let distance = distance_from_line_tiles * self.map.tile_wh;
+            if distance < self.shortest_wall_distance {
+                self.shortest_wall_distance = distance;
+            }
         }
-        if shortest_distance < f32::MAX {
-            println!("Shortest distance to wall collision: {:?}", shortest_distance);
-        }
-        if wall_avoidance_vector.magnitude() > 0.0 {
-            println!("Walls would be best avoided by moving towards: {:?}", wall_avoidance_vector);
+        if self.wall_avoidance_vector.magnitude() > 0.0 {
+            println!("Walls (shortest distance: {:?}) would be best avoided by moving towards: {:?}",
+                    self.shortest_wall_distance, self.wall_avoidance_vector);
         }
 
         let mut wanted_linear_speed = 0.0;
@@ -222,10 +241,24 @@ impl BrainState {
         // Reset diagnostic values
         self.attack_p = None;
         self.scan_p = None;
+        self.wall_avoid_p = None;
 
-        // TODO:
-        // Detect if the robot is moving weapon first into arena wall, and if
-        // so, prioritize a wall avoidance maneuver
+        // Prioritize avoiding walls
+        if self.shortest_wall_distance < 20.0 ||
+                self.shortest_wall_head_on_distance < 40.0 {
+            println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
+            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
+            self.wall_avoid_p = Some(target_p);
+            let mut max_linear_speed = 50.0;
+            if self.shortest_wall_head_on_distance < 40.0 {
+                max_linear_speed = 0.0;
+            }
+            let max_rotation_speed = PI * 2.0;
+            let (mut wanted_linear_speed, mut wanted_rotation_speed) =
+                        self.drive_towards_absolute_position(
+                            target_p, max_linear_speed, max_rotation_speed);
+            return (wanted_linear_speed, wanted_rotation_speed);
+        }
 
         // See if the enemy can be reasonably found on the map
 
