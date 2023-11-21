@@ -192,7 +192,7 @@ impl BrainState {
             let distance_from_line_tiles = vector_from_wall_to_robot.magnitude();
             let importance = 1.0 / (distance_from_line_tiles +
                     IMPORTANCE_CONSTANT / self.map.tile_wh);
-            self.wall_avoidance_vector += vector_from_wall_to_robot * importance;
+            self.wall_avoidance_vector += vector_from_wall_to_robot.normalize() * importance;
             let distance = distance_from_line_tiles * self.map.tile_wh;
             if distance < self.shortest_wall_distance {
                 self.shortest_wall_distance = distance;
@@ -244,19 +244,20 @@ impl BrainState {
         self.wall_avoid_p = None;
 
         // Prioritize avoiding walls
-        if self.shortest_wall_distance < 20.0 ||
-                self.shortest_wall_head_on_distance < 40.0 {
+        if self.shortest_wall_distance < 15.0 ||
+                self.shortest_wall_head_on_distance < 30.0 {
             println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
-            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
+            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 30.0;
             self.wall_avoid_p = Some(target_p);
-            let mut max_linear_speed = 50.0;
-            if self.shortest_wall_head_on_distance < 40.0 {
-                max_linear_speed = 0.0;
-            }
-            let max_rotation_speed = PI * 2.0;
+            let max_linear_speed = 50.0;
+            let max_rotation_speed = PI * 3.0;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
+            if self.shortest_wall_head_on_distance < 40.0 {
+                //wanted_linear_speed = -max_linear_speed * 0.2;
+                wanted_linear_speed *= 0.2;
+            }
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
@@ -334,6 +335,14 @@ impl BrainState {
                 (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
                 (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
             );
+
+            // TODO: Create a wall avoidance vector and shortest_wall_distance
+            // values for this target_p and adjust it further from the walls if
+            // needed
+            // TODO: Especially check if target_p is behind a wall. If it is,
+            // don't go there.
+            // TODO: What else to pick instead?
+
             //println!("target_p: {:?}", target_p);
             self.scan_p = Some(target_p);
             // Drive towards that spot
