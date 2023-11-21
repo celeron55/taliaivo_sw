@@ -634,5 +634,31 @@ mod tests {
         assert!((vector.x - 0.0).abs() < 1e-6);
         assert_eq!(vector.y, -5.0);
     }
+
+    #[test]
+    fn test_vector_to_point_horizontal_line() {
+        let line = HoughLine::new(90.0, 10.0, 0); // Horizontal line 10 units from Y-axis
+
+        // Point above the line
+        let point_above = Vector2::new(0.0, 15.0);
+        assert_eq!(line.vector_to_point(point_above), Vector2::new(0.0, -5.0));
+
+        // Point below the line
+        let point_below = Vector2::new(0.0, 5.0);
+        assert_eq!(line.vector_to_point(point_below), Vector2::new(0.0, 5.0));
+    }
+
+    #[test]
+    fn test_vector_to_point_vertical_line() {
+        let line = HoughLine::new(0.0, 10.0, 0); // Vertical line 10 units from X-axis
+
+        // Point to the left of the line
+        let point_left = Vector2::new(5.0, 0.0);
+        assert_eq!(line.vector_to_point(point_left), Vector2::new(5.0, 0.0));
+
+        // Point to the right of the line
+        let point_right = Vector2::new(15.0, 0.0);
+        assert_eq!(line.vector_to_point(point_right), Vector2::new(-5.0, 0.0));
+    }
 }
 
