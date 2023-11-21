@@ -583,7 +583,7 @@ fn main() {
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            //brain2.update(&mut robots[1]);
+            brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
