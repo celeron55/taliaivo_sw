@@ -282,7 +282,7 @@ impl HoughLine {
         let closest_point_on_line = point - line_normal * perpendicular_offset;
 
         // The vector from the point to the closest point on the line
-        closest_point_on_line - point
+        point - closest_point_on_line
     }
 }
 
@@ -632,7 +632,7 @@ mod tests {
         let vector = line.vector_to_point(point);
         // Vector pointing downwards, 5 units
         assert!((vector.x - 0.0).abs() < 1e-6);
-        assert_eq!(vector.y, -5.0);
+        assert_eq!(vector.y, 5.0);
     }
 
     fn assert_vector_eq_with_tolerance(vec1: Vector2<f32>, vec2: Vector2<f32>, tolerance: f32) {
@@ -654,11 +654,11 @@ mod tests {
 
         let point_above = Vector2::new(0.0, 15.0);
         let vector_above = line.vector_to_point(point_above);
-        assert_vector_eq_with_tolerance(vector_above, Vector2::new(0.0, -5.0), FLOAT_TOLERANCE);
+        assert_vector_eq_with_tolerance(vector_above, Vector2::new(0.0, 5.0), FLOAT_TOLERANCE);
 
         let point_below = Vector2::new(0.0, 5.0);
         let vector_below = line.vector_to_point(point_below);
-        assert_vector_eq_with_tolerance(vector_below, Vector2::new(0.0, 5.0), FLOAT_TOLERANCE);
+        assert_vector_eq_with_tolerance(vector_below, Vector2::new(0.0, -5.0), FLOAT_TOLERANCE);
     }
 
     #[test]
@@ -667,11 +667,11 @@ mod tests {
 
         let point_left = Vector2::new(5.0, 0.0);
         let vector_left = line.vector_to_point(point_left);
-        assert_vector_eq_with_tolerance(vector_left, Vector2::new(5.0, 0.0), FLOAT_TOLERANCE);
+        assert_vector_eq_with_tolerance(vector_left, Vector2::new(-5.0, 0.0), FLOAT_TOLERANCE);
 
         let point_right = Vector2::new(15.0, 0.0);
         let vector_right = line.vector_to_point(point_right);
-        assert_vector_eq_with_tolerance(vector_right, Vector2::new(-5.0, 0.0), FLOAT_TOLERANCE);
+        assert_vector_eq_with_tolerance(vector_right, Vector2::new(5.0, 0.0), FLOAT_TOLERANCE);
     }
 }
 
