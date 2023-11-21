@@ -245,33 +245,19 @@ impl BrainState {
         self.scan_p = None;
         self.wall_avoid_p = None;
 
-        // Prioritize avoiding walls
-        if self.shortest_wall_distance < 15.0 ||
-                self.shortest_wall_head_on_distance < 30.0 {
-            //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
-            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 30.0;
-            self.wall_avoid_p = Some(target_p);
-            let max_linear_speed = 50.0;
-            let max_rotation_speed = PI * 3.0;
-            let (mut wanted_linear_speed, mut wanted_rotation_speed) =
-                        self.drive_towards_absolute_position(
-                            target_p, max_linear_speed, max_rotation_speed);
-            if self.shortest_wall_head_on_distance < 40.0 {
-                //wanted_linear_speed = -max_linear_speed * 0.2;
-                wanted_linear_speed *= 0.2;
-            }
-            return (wanted_linear_speed, wanted_rotation_speed);
-        }
-
         // See if the enemy can be reasonably found on the map
 
         // TODO: Improve enemy finding
         // - The enemy can take many shapes within 2x2 tiles
         // - The enemy can be against a wall
         // - The age of information about the enemy can vary
+        // - The enemy should be tracked throgh multiple updates so that if its
+        //   position is not obvious right now, slightly older information can
+        //   be used. Ideally the enemy velocity should be taken into account.
 
+        let score_requirement = 4.0;
         //let score_requirement = 3.4;
-        let score_requirement = 3.0;
+        //let score_requirement = 3.0;
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -290,8 +276,34 @@ impl BrainState {
             0.2, 0.8, 0.8, 0.8, 0.8, 0.2,
             0.1, 0.2, 0.2, 0.2, 0.2, 0.1,
         ];
+        // Filter out positions that are behind or close to walls
+        let robot_tile = self.pos.coords * (1.0 / self.map.tile_wh);
+        let wall_filter = |x: u32, y: u32| -> bool {
+            // Take into account pattern size and use the middle as the target
+            // point
+            let point_tile = Vector2::new(x as f32 + pattern_w as f32 / 2.0,
+                    y as f32 + pattern_h as f32 / 2.0);
+            for line in &self.wall_lines {
+                // If the distance from the point to the wall is smaller than a
+                // set threshold, we don't want to investigate the point as it
+                // would be unsafe
+                let d_point_to_wall = line.distance(point_tile);
+                if d_point_to_wall < 5.0 {
+                    return false;
+                }
+                // If the distance from the robot to the wall is smaller than
+                // the distance from the robot to the point, then the point is
+                // beyond the wall
+                let d_robot_to_wall = line.distance(robot_tile);
+                let d_robot_to_point = (robot_tile - point_tile).magnitude();
+                if d_robot_to_wall < d_robot_to_point {
+                    return false;
+                }
+            }
+            true
+        };
         let result_maybe = self.map.find_binary_pattern(
-                &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights), accept_any_xy);
+                &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights), wall_filter);
         if let Some(result) = result_maybe {
             let score = result.2;
             //println!("score: {:?}", score);
@@ -304,6 +316,24 @@ impl BrainState {
                 //println!("attack {:?}", target_p);
                 return self.create_attack_motion(target_p);
             }
+        }
+
+        // Avoid walls
+        if self.shortest_wall_distance < 15.0 ||
+                self.shortest_wall_head_on_distance < 30.0 {
+            //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
+            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 30.0;
+            self.wall_avoid_p = Some(target_p);
+            let max_linear_speed = 50.0;
+            let max_rotation_speed = PI * 3.0;
+            let (mut wanted_linear_speed, mut wanted_rotation_speed) =
+                        self.drive_towards_absolute_position(
+                            target_p, max_linear_speed, max_rotation_speed);
+            if self.shortest_wall_head_on_distance < 40.0 {
+                //wanted_linear_speed = -max_linear_speed * 0.2;
+                wanted_linear_speed *= 0.2;
+            }
+            return (wanted_linear_speed, wanted_rotation_speed);
         }
 
         //println!("scan");
@@ -325,7 +355,7 @@ impl BrainState {
             false, false, false, false, false, false,
             false, false, false, false, false, false,
         ];
-        // Filter out positions that are behind walls
+        // Filter out positions that are behind or close to walls
         let robot_tile = self.pos.coords * (1.0 / self.map.tile_wh);
         let wall_filter = |x: u32, y: u32| -> bool {
             // Take into account pattern size and use the middle as the target
