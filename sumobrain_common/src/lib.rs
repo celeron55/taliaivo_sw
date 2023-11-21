@@ -231,7 +231,7 @@ impl BrainState {
             let maybe_newly_occupied = self.map.paint_proximity_reading(
                     self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
             if let Some(newly_occupied_p) = maybe_newly_occupied {
-                println!("Newly occupied: {:?}", newly_occupied_p);
+                //println!("Newly occupied: {:?}", newly_occupied_p);
                 // Filter out point if it is close to a wall
                 let newly_occupied_p_f = Point2::new(
                         newly_occupied_p.x as f32,
