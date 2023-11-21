@@ -434,15 +434,15 @@ impl BrainState {
             let mut wanted_rotation_speed = PI * 0.0;
             let d = 15.0;
             if d0 < d {
-                println!("Stupid hit avoidance logic: Reverse");
+                //println!("Stupid hit avoidance logic: Reverse");
                 wanted_linear_speed = -50.0;
             }
             if d1 < d {
-                println!("Stupid hit avoidance logic: Turn right");
+                //println!("Stupid hit avoidance logic: Turn right");
                 wanted_rotation_speed = PI * 2.0;
             }
             if d2 < d {
-                println!("Stupid hit avoidance logic: Turn left");
+                //println!("Stupid hit avoidance logic: Turn left");
                 wanted_rotation_speed = PI * -2.0;
             }
             if wanted_linear_speed != 0.0 || wanted_rotation_speed != 0.0 {
