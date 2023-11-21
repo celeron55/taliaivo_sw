@@ -266,7 +266,7 @@ impl BrainState {
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
                 self.wall_avoid_p, &self.wall_lines);
 
-        // TODO: Avoid walls found by hough_transform
+        // Process wall lines
 
         let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
         let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
