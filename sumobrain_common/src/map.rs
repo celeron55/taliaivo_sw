@@ -273,17 +273,17 @@ impl HoughLine {
 
         ((point.x * cos_theta + point.y * sin_theta) - rho).abs()
     }
-	pub fn vector_to_point(&self, point: Vector2<f32>) -> Vector2<f32> {
-		let angle_rad = self.angle.to_radians();
-		let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
-		let line_point = line_normal * self.distance;
+    pub fn vector_to_point(&self, point: Vector2<f32>) -> Vector2<f32> {
+        let angle_rad = self.angle.to_radians();
+        let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
+        
+        // Calculate the closest point on the line to the given point
+        let perpendicular_offset = (point.dot(&line_normal) - self.distance).abs();
+        let closest_point_on_line = point - line_normal * perpendicular_offset;
 
-		let point_to_line = point - line_point;
-		let projected_length = point_to_line.dot(&line_normal);
-		let closest_point_on_line = line_point + projected_length * line_normal;
-
-		closest_point_on_line - point
-	}
+        // The vector from the point to the closest point on the line
+        closest_point_on_line - point
+    }
 }
 
 pub fn angle_difference(angle1: f32, angle2: f32) -> f32 {
