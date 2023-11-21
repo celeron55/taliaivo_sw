@@ -392,12 +392,12 @@ impl BrainState {
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
-            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
         ];
         // Filter out positions that are behind or close to walls
         let robot_tile = self.pos.coords * (1.0 / self.map.tile_wh);
@@ -433,10 +433,10 @@ impl BrainState {
             }
             true
         };
-        // A bit more priority (negative score) is put on forgotten area in
-        // order to generate exploration targets
+        // A bit more priority (negative score) could be put on forgotten area
+        // in order to generate exploration targets
         let result_maybe = self.map.find_pattern(
-                &pattern, pattern_w, pattern_h, 50.0, -0.1, wall_filter);
+                &pattern, pattern_w, pattern_h, 10.0, 0.1, wall_filter);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
@@ -477,8 +477,8 @@ impl BrainState {
         wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
         // Revert linear speed at an interval to allow the weapon to spin up
         if self.attack_step_count > UPS * 2 &&
-                ((self.attack_step_count as u32) % (UPS * 4)) < (UPS * 1) {
-            wanted_linear_speed *= -1.0;
+                ((self.attack_step_count as u32) % (UPS * 4)) < (UPS as f32 * 0.3) as u32 {
+            wanted_linear_speed *= -0.2;
         }
         self.attack_step_count += 1;
         return (wanted_linear_speed, wanted_rotation_speed);
