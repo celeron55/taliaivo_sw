@@ -522,8 +522,7 @@ impl KeyboardController {
 
     fn control(&self, robot: &mut Robot) {
         let speed = 100.0;
-        let turn_speed = 40.0;
-        robot.weapon_throttle = 100.0;
+        let turn_speed = 35.0;
         robot.wheel_speed_left = 0.0;
         robot.wheel_speed_right = 0.0;
         if self.up {
@@ -544,6 +543,13 @@ impl KeyboardController {
             robot.wheel_speed_left -= turn_speed;
             robot.wheel_speed_right += turn_speed;
         }
+
+        robot.weapon_throttle = 100.0;
+
+        // Clear some diagnostic info
+        robot.diagnostic_attack_p = None;
+        robot.diagnostic_scan_p = None;
+        robot.diagnostic_wall_avoid_p = None;
     }
 }
 
@@ -610,6 +616,11 @@ fn main() {
     let mut brain = BrainState::new(0);
     let mut brain2 = BrainState::new(UPS as u32 * 2);
     let mut keyboard_controller = KeyboardController::new();
+    enum RobotController {
+        Brain,
+        Keyboard,
+    }
+    let mut robot2_controller = RobotController::Brain;
 
     let mut counter: u64 = 0;
 
@@ -650,8 +661,15 @@ fn main() {
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            //brain2.update(&mut robots[1]);
-            keyboard_controller.control(&mut robots[1]);
+
+            match robot2_controller {
+                RobotController::Brain => {
+                    brain2.update(&mut robots[1]);
+                },
+                RobotController::Keyboard => {
+                    keyboard_controller.control(&mut robots[1]);
+                },
+            }
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
@@ -682,6 +700,22 @@ fn main() {
             );
 
             counter += 1;
+        }
+
+        if let Some(Button::Keyboard(key)) = e.press_args() {
+            match key {
+                Key::K => {
+                    match robot2_controller {
+                        RobotController::Brain => {
+                            robot2_controller = RobotController::Keyboard;
+                        },
+                        RobotController::Keyboard => {
+                            robot2_controller = RobotController::Brain;
+                        },
+                    }
+                },
+                _ => {}
+            }
         }
 
         keyboard_controller.event(&e);
