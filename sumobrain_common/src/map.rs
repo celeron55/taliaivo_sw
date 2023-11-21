@@ -275,13 +275,11 @@ impl HoughLine {
     }
     pub fn vector_to_point(&self, point: Vector2<f32>) -> Vector2<f32> {
         let angle_rad = self.angle.to_radians();
-        let line_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
-        let line_normal = Vector2::new(-line_direction.y, line_direction.x);
-        let line_point = line_direction * self.distance;
-
-        // Find perpendicular projection of point onto line
-        let perpendicular_projection = (point - line_point).dot(&line_normal) * line_normal;
-        let closest_point_on_line = point - perpendicular_projection;
+        let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
+        
+        // Calculate the closest point on the line to the given point
+        let perpendicular_offset = (point.dot(&line_normal) - self.distance).abs();
+        let closest_point_on_line = point - line_normal * perpendicular_offset;
 
         // The vector from the point to the closest point on the line
         closest_point_on_line - point
