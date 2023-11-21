@@ -35,9 +35,11 @@ impl Map {
 
     // something_seen: If nothing is found within sensor range, set this to
     // true, and set distance to the sensor maximum range
-    // Return value: Some(point) if a previously unoccupied point was now marked occupied
+    // Return value: Some(point) if a previously unoccupied point was now marked
+    // occupied. This is returned in tile coordinates.
     pub fn paint_proximity_reading(&mut self, starting_position: Point2<f32>,
-            angle_rad: f32, distance: f32, something_seen: bool) ->
+            angle_rad: f32, distance: f32, something_seen: bool,
+            occupation_event_max_starting_value: f32) ->
             Option<Point2<u32>> {
         // Calculate end point of the ray
         let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
@@ -75,7 +77,7 @@ impl Map {
             let x = x1 as u32;
             let y = y1 as u32;
             if let Some(tile) = self.data.get_mut((y * self.width + x) as usize) {
-                if *tile < 0.0 {
+                if *tile < occupation_event_max_starting_value {
                     newly_occupied = Some(Point2::new(x, y));
                 }
                 *tile = 100.0; // Mark as occupied

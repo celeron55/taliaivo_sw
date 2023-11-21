@@ -217,12 +217,23 @@ impl BrainState {
 
         for reading in &self.proximity_sensor_readings {
             let maybe_newly_occupied = self.map.paint_proximity_reading(
-                    self.pos, reading.0 + self.rot, reading.1, reading.2);
+                    self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
             if let Some(newly_occupied_p) = maybe_newly_occupied {
-                // TODO: Detect when new positions are being occupied in a
-                // straight or squiggly trail. That is indicative of another
-                // robot being on the move.
                 println!("Newly occupied: {:?}", newly_occupied_p);
+                // TODO: Filter out point if it is close to a wall
+                // Detect if the newly occupied point behind us regarding to our
+                // movement direction. That would mean it is likely the newly
+                // occupied point was not caused by our movement and instead it
+                // is the enemy trying to catch up on us. If it is such a point,
+                // add it to enemy_history.
+                let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
+                let newly_occupied_p_world = Point2::new(
+                        newly_occupied_p.x as f32 * self.map.tile_wh,
+                        newly_occupied_p.y as f32 * self.map.tile_wh);
+                let point_direction_vector = newly_occupied_p_world - self.pos;
+                if robot_direction_vector.dot(&point_direction_vector) < 0.0 {
+                    self.enemy_history.push((self.counter, newly_occupied_p_world));
+                }
             }
         }
 
