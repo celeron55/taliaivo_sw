@@ -191,7 +191,7 @@ impl Map {
     }
 }
 
-pub fn accept_any_xy(x: u32, y: u32) -> bool { true }
+pub fn accept_any_xy(_x: u32, _y: u32) -> bool { true }
 
 impl Map {
     pub fn find_binary_pattern<F>(&self, pattern: &[bool], pattern_width: u32, pattern_height: u32,
@@ -451,7 +451,7 @@ impl Map {
             -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
         let mut merged_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
         let mut used: ArrayVec<bool, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
-        for i in 0..lines.len() {
+        for _i in 0..lines.len() {
             used.push(false);
         }
 

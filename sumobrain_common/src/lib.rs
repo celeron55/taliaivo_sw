@@ -5,7 +5,7 @@ extern crate ringbuffer;
 pub mod map;
 
 use arrayvec::ArrayVec;
-use libc_print::std_name::{println};
+
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
@@ -193,7 +193,7 @@ impl BrainState {
             self.map.translate(dx_tiles, dy_tiles);
         }
 
-        let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
+        let (_gyro_x, _gyro_y, gyro_z) = robot.get_gyroscope_reading();
         //println!("gyro_z: {:?}", gyro_z);
 
         // TODO: Make sure this is scaled appropriately
@@ -280,7 +280,7 @@ impl BrainState {
                 /*println!("On trajectory to hit: p(tiles)={:?}, distance(tiles)={:?}",
                         intersection_point_tiles, distance_tiles);*/
                 let distance = distance_tiles * self.map.tile_wh;
-                let intersection_point = intersection_point_tiles * self.map.tile_wh;
+                let _intersection_point = intersection_point_tiles * self.map.tile_wh;
                 if distance < self.shortest_wall_head_on_distance {
                     self.shortest_wall_head_on_distance = distance;
                 }
@@ -336,7 +336,7 @@ impl BrainState {
 
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 
-        let mut weapon_throttle = 100.0;
+        let weapon_throttle = 100.0;
         /*if gyro_z.abs() > 5.0 {
             weapon_throttle = 0.0;
         }*/
@@ -350,9 +350,9 @@ impl BrainState {
             let d0 = self.proximity_sensor_readings[0].1;
             let d1 = self.proximity_sensor_readings[1].1;
             let d2 = self.proximity_sensor_readings[2].1;
-            let d3 = self.proximity_sensor_readings[3].1;
-            let d4 = self.proximity_sensor_readings[4].1;
-            let d5 = self.proximity_sensor_readings[5].1;
+            let _d3 = self.proximity_sensor_readings[3].1;
+            let _d4 = self.proximity_sensor_readings[4].1;
+            let _d5 = self.proximity_sensor_readings[5].1;
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
             let mut safe_linear_speed = 100.0;
@@ -499,9 +499,9 @@ impl BrainState {
             let d0 = self.proximity_sensor_readings[0].1;
             let d1 = self.proximity_sensor_readings[1].1;
             let d2 = self.proximity_sensor_readings[2].1;
-            let d3 = self.proximity_sensor_readings[3].1;
-            let d4 = self.proximity_sensor_readings[4].1;
-            let d5 = self.proximity_sensor_readings[5].1;
+            let _d3 = self.proximity_sensor_readings[3].1;
+            let _d4 = self.proximity_sensor_readings[4].1;
+            let _d5 = self.proximity_sensor_readings[5].1;
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
             let mut wanted_linear_speed = 0.0;
@@ -590,7 +590,7 @@ impl BrainState {
             //println!("target_p: {:?}", target_p);
             self.scan_p = Some(target_p);
             // Drive towards that spot
-            let (mut wanted_linear_speed, mut wanted_rotation_speed) =
+            let (wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed, false);
             // Apply motor speed modulation to get scanning data
@@ -650,7 +650,7 @@ impl BrainState {
         let heading = Rotation2::rotation_between(&Vector2::x(), &u);
         let target_angle_rad = heading.angle();
         let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
-        let mut speed_factor = if allow_overshoot {
+        let speed_factor = if allow_overshoot {
             (1.0 - angle_diff / PI * 2.0).clamp(0.0, 1.0)
         } else {
             ((u.magnitude() / 20.0).clamp(0.0, 1.0) - angle_diff / PI * 2.0).clamp(0.0, 1.0)
