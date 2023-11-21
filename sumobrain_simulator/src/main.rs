@@ -481,6 +481,72 @@ impl ArenaWall {
     }
 }
 
+struct KeyboardController {
+    up: bool,
+    down: bool,
+    left: bool,
+    right: bool,
+}
+
+impl KeyboardController {
+    fn new() -> Self {
+        KeyboardController {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+        }
+    }
+
+    fn event(&mut self, e: &piston_window::Event) {
+        if let Some(Button::Keyboard(key)) = e.press_args() {
+            match key {
+                Key::Up => self.up = true,
+                Key::Down => self.down = true,
+                Key::Left => self.left = true,
+                Key::Right => self.right = true,
+                _ => {}
+            }
+        }
+
+        if let Some(Button::Keyboard(key)) = e.release_args() {
+            match key {
+                Key::Up => self.up = false,
+                Key::Down => self.down = false,
+                Key::Left => self.left = false,
+                Key::Right => self.right = false,
+                _ => {}
+            }
+        }
+    }
+
+    fn control(&self, robot: &mut Robot) {
+        let speed = 100.0;
+        let turn_speed = 40.0;
+        robot.weapon_throttle = 100.0;
+        robot.wheel_speed_left = 0.0;
+        robot.wheel_speed_right = 0.0;
+        if self.up {
+            robot.wheel_speed_left += speed;
+            robot.wheel_speed_right += speed;
+        }
+        if self.down {
+            robot.wheel_speed_left -= speed;
+            robot.wheel_speed_right -= speed;
+        }
+        if self.left {
+            // FIXME: This seems backwards
+            robot.wheel_speed_left += turn_speed;
+            robot.wheel_speed_right -= turn_speed;
+        }
+        if self.right {
+            // FIXME: This seems backwards
+            robot.wheel_speed_left -= turn_speed;
+            robot.wheel_speed_right += turn_speed;
+        }
+    }
+}
+
 fn main() {
     let mut window: PistonWindow = WindowSettings::new("Sumobrain Simulator", [1200, 600])
         .exit_on_esc(true)
@@ -543,6 +609,7 @@ fn main() {
 
     let mut brain = BrainState::new(0);
     let mut brain2 = BrainState::new(UPS as u32 * 2);
+    let mut keyboard_controller = KeyboardController::new();
 
     let mut counter: u64 = 0;
 
@@ -583,7 +650,8 @@ fn main() {
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            brain2.update(&mut robots[1]);
+            //brain2.update(&mut robots[1]);
+            keyboard_controller.control(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
@@ -615,5 +683,7 @@ fn main() {
 
             counter += 1;
         }
+
+        keyboard_controller.event(&e);
     }
 }
