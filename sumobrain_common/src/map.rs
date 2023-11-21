@@ -273,17 +273,17 @@ impl HoughLine {
 
         ((point.x * cos_theta + point.y * sin_theta) - rho).abs()
     }
-    pub fn vector_to_point(&self, point: Vector2<f32>) -> Vector2<f32> {
-        let angle_rad = self.angle.to_radians();
-        let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
-        
-        // Calculate the closest point on the line to the given point
-        let perpendicular_offset = (point.dot(&line_normal) - self.distance).abs();
-        let closest_point_on_line = point - line_normal * perpendicular_offset;
+	pub fn vector_to_point(&self, point: Vector2<f32>) -> Vector2<f32> {
+		let angle_rad = self.angle.to_radians();
+		let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
+		let line_point = line_normal * self.distance;
 
-        // The vector from the point to the closest point on the line
-        closest_point_on_line - point
-    }
+		let point_to_line = point - line_point;
+		let projected_length = point_to_line.dot(&line_normal);
+		let closest_point_on_line = line_point + projected_length * line_normal;
+
+		closest_point_on_line - point
+	}
 }
 
 pub fn angle_difference(angle1: f32, angle2: f32) -> f32 {
@@ -635,30 +635,43 @@ mod tests {
         assert_eq!(vector.y, -5.0);
     }
 
+    fn assert_vector_eq_with_tolerance(vec1: Vector2<f32>, vec2: Vector2<f32>, tolerance: f32) {
+        if (vec1.x - vec2.x).abs() >= tolerance || (vec1.y - vec2.y).abs() >= tolerance {
+            println!("Assertion failed: Vectors not equal within tolerance");
+            println!("Actual vector:   [{}, {}]", vec1.x, vec1.y);
+            println!("Expected vector: [{}, {}]", vec2.x, vec2.y);
+            println!("Tolerance: {}", tolerance);
+            panic!("Vectors differ beyond tolerance");
+        }
+    }
+
+
+    const FLOAT_TOLERANCE: f32 = 1e-6;
+
     #[test]
     fn test_vector_to_point_horizontal_line() {
-        let line = HoughLine::new(90.0, 10.0, 0); // Horizontal line 10 units from Y-axis
+        let line = HoughLine::new(90.0, 10.0, 0);
 
-        // Point above the line
         let point_above = Vector2::new(0.0, 15.0);
-        assert_eq!(line.vector_to_point(point_above), Vector2::new(0.0, -5.0));
+        let vector_above = line.vector_to_point(point_above);
+        assert_vector_eq_with_tolerance(vector_above, Vector2::new(0.0, -5.0), FLOAT_TOLERANCE);
 
-        // Point below the line
         let point_below = Vector2::new(0.0, 5.0);
-        assert_eq!(line.vector_to_point(point_below), Vector2::new(0.0, 5.0));
+        let vector_below = line.vector_to_point(point_below);
+        assert_vector_eq_with_tolerance(vector_below, Vector2::new(0.0, 5.0), FLOAT_TOLERANCE);
     }
 
     #[test]
     fn test_vector_to_point_vertical_line() {
-        let line = HoughLine::new(0.0, 10.0, 0); // Vertical line 10 units from X-axis
+        let line = HoughLine::new(0.0, 10.0, 0);
 
-        // Point to the left of the line
         let point_left = Vector2::new(5.0, 0.0);
-        assert_eq!(line.vector_to_point(point_left), Vector2::new(5.0, 0.0));
+        let vector_left = line.vector_to_point(point_left);
+        assert_vector_eq_with_tolerance(vector_left, Vector2::new(5.0, 0.0), FLOAT_TOLERANCE);
 
-        // Point to the right of the line
         let point_right = Vector2::new(15.0, 0.0);
-        assert_eq!(line.vector_to_point(point_right), Vector2::new(-5.0, 0.0));
+        let vector_right = line.vector_to_point(point_right);
+        assert_vector_eq_with_tolerance(vector_right, Vector2::new(-5.0, 0.0), FLOAT_TOLERANCE);
     }
 }
 
