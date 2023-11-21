@@ -348,7 +348,7 @@ impl BrainState {
         // See if the enemy history ringbuffer looks such that we can determine
         // where the enemy is. If so, attack the enemy.
         let r = average_enemy_position_over_recent_ticks(
-                &self.enemy_history, self.counter - (UPS as f32 * 0.15) as u64);
+                &self.enemy_history, self.counter - (UPS as f32 * 0.20) as u64);
         if let Some(target_p) = r {
             return self.create_attack_motion(target_p);
         }
