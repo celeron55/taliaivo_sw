@@ -353,11 +353,11 @@ impl BrainState {
         if let Some(target_p) = r {
             return self.create_attack_motion(target_p);
         } else {
-            /*let r = average_enemy_position_over_recent_ticks(
+            let r = average_enemy_position_over_recent_ticks(
                     &self.enemy_history, self.counter - (UPS as f32 * 0.30) as u64);
             if let Some(target_p) = r {
                 return self.create_attack_motion(target_p);
-            }*/
+            }
         }
 
         // Avoid walls as a higher priority than scanning
