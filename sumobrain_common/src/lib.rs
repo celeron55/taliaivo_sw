@@ -1,12 +1,14 @@
 #![no_std]
 
 extern crate arrayvec; // Use static arrays like the embedded code
+extern crate ringbuffer;
 pub mod map;
 
 use arrayvec::ArrayVec;
 use libc_print::std_name::{println};
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
+use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 pub use map::*;
 
 pub trait RobotInterface {
@@ -42,6 +44,8 @@ pub trait RobotInterface {
 
 pub const UPS: u32 = 100; // Updates per second
 
+const ENEMY_HISTORY_LENGTH: usize = 50;
+
 fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
     if target_value > previous_value {
         if previous_value + max_change > target_value {
@@ -53,6 +57,26 @@ fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -
             return target_value;
         }
         return previous_value - max_change;
+    }
+}
+
+fn average_enemy_position_over_recent_ticks(
+        buffer: &ConstGenericRingBuffer<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
+        min_tick: u64) -> Option<Point2<f32>> {
+    let mut sum_position = Point2::new(0.0, 0.0);
+    let mut count = 0;
+
+    for &(tick, position) in buffer.iter() {
+        if tick >= min_tick {
+            sum_position.coords += position.coords;
+            count += 1;
+        }
+    }
+
+    if count > 0 {
+        Some(Point2::new(sum_position.x / count as f32, sum_position.y / count as f32))
+    } else {
+        None // No data for the specified range
     }
 }
 
@@ -74,6 +98,7 @@ pub struct BrainState {
     shortest_wall_head_on_distance: f32,
     wall_avoidance_vector: Vector2<f32>,
     shortest_wall_distance: f32,
+    enemy_history: ConstGenericRingBuffer::<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
 }
 
 impl BrainState {
@@ -96,6 +121,7 @@ impl BrainState {
             shortest_wall_head_on_distance: f32::MAX,
             wall_avoidance_vector: Vector2::new(0.0, 0.0),
             shortest_wall_distance: f32::MAX,
+            enemy_history: ConstGenericRingBuffer::new(),
         }
     }
 
@@ -245,8 +271,6 @@ impl BrainState {
         self.scan_p = None;
         self.wall_avoid_p = None;
 
-        // See if the enemy can be reasonably found on the map
-
         // TODO: Improve enemy finding
         // - The enemy can take many shapes within 2x2 tiles
         // - The enemy can be against a wall
@@ -254,6 +278,9 @@ impl BrainState {
         // - The enemy should be tracked throgh multiple updates so that if its
         //   position is not obvious right now, slightly older information can
         //   be used. Ideally the enemy velocity should be taken into account.
+
+        // See if the enemy can be reasonably found on the map and if so, add it
+        // to the enemy history ringbuffer
 
         let score_requirement = 3.5;
         let pattern_w: u32 = 6;
@@ -311,14 +338,24 @@ impl BrainState {
                     (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
                     (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
                 );
+                self.enemy_history.push((self.counter, target_p.clone()));
+                //println!("enemy_history.len(): {:?}", self.enemy_history.len());
                 //println!("attack {:?}", target_p);
-                return self.create_attack_motion(target_p);
+                //return self.create_attack_motion(target_p);
             }
         }
 
-        // Avoid walls
+        // See if the enemy history ringbuffer looks such that we can determine
+        // where the enemy is. If so, attack the enemy.
+        let r = average_enemy_position_over_recent_ticks(
+                &self.enemy_history, self.counter - (UPS as f32 * 0.15) as u64);
+        if let Some(target_p) = r {
+            return self.create_attack_motion(target_p);
+        }
+
+        // Avoid walls as a higher priority than scanning
         if self.shortest_wall_distance < 10.0 ||
-                self.shortest_wall_head_on_distance < 20.0 {
+                self.shortest_wall_head_on_distance < 30.0 {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
             let target_p = self.pos + self.wall_avoidance_vector.normalize() * 20.0;
             self.wall_avoid_p = Some(target_p);
@@ -327,7 +364,7 @@ impl BrainState {
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
-            if self.shortest_wall_head_on_distance < 20.0 {
+            if self.shortest_wall_head_on_distance < 30.0 {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
                 wanted_linear_speed *= 0.2;
             }
@@ -382,7 +419,7 @@ impl BrainState {
         // NOTE: A bit more priority (negative score) is put on forgotten area
         // in order to generate exploration targets
         let result_maybe = self.map.find_binary_pattern(
-                &pattern, pattern_w, pattern_h, 50.0, -0.1, None, wall_filter);
+                &pattern, pattern_w, pattern_h, 50.0, -0.5, None, wall_filter);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
