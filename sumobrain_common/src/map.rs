@@ -236,17 +236,19 @@ impl Map {
 }
 
 const MAX_DISTANCE: i32 = MAP_W as i32;
-const DISTANCE_STEP: usize = 2; // Distance resolution
+const DISTANCE_STEP: usize = 2; // Distance resolution (tiles)
 const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
-const HOUGH_THRESHOLD: usize = 11;
+const HOUGH_THRESHOLD: usize = 10;
+const KEEP_NUM_TOP_LINES: usize = 8;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
+const EDGE_MIN_POS: f32 = 50.0;
+const EDGE_MAX_NEG: f32 = -30.0;
+
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
 const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
-const EDGE_MIN_POS: f32 = 40.0;
-const EDGE_MAX_NEG: f32 = -20.0;
 
 type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
 
@@ -423,7 +425,7 @@ impl Map {
 
         // Sort by votes and select top lines
         line_candidates.sort_by(|a, b| b.votes.cmp(&a.votes)); // Sort in descending order of votes
-        line_candidates.truncate(10); // Keep only the top lines
+        line_candidates.truncate(KEEP_NUM_TOP_LINES); // Keep only the top lines
 
         return line_candidates;
     }

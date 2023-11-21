@@ -241,10 +241,12 @@ impl BrainState {
         let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
 
         // Limit wheel speed changes, i.e. limit acceleration
+        //let max_accel = 250.0 / UPS as f32;
+        let max_accel = 333.3 / UPS as f32;
         self.applied_wheel_speed_left = limit_acceleration(self.applied_wheel_speed_left,
-                wanted_wheel_speed_left, 250.0 / UPS as f32);
+                wanted_wheel_speed_left, max_accel);
         self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
-                wanted_wheel_speed_right, 250.0 / UPS as f32);
+                wanted_wheel_speed_right, max_accel);
 
         // Rotation has to be prioritized, thus if the wanted wheel speed
         // difference wasn't applied, force it, ignoring acceleration
@@ -282,7 +284,7 @@ impl BrainState {
         // See if the enemy can be reasonably found on the map and if so, add it
         // to the enemy history ringbuffer
 
-        let score_requirement = 3.5;
+        let score_requirement = 3.2;
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -348,23 +350,31 @@ impl BrainState {
         // See if the enemy history ringbuffer looks such that we can determine
         // where the enemy is. If so, attack the enemy.
         let r = average_enemy_position_over_recent_ticks(
-                &self.enemy_history, self.counter - (UPS as f32 * 0.20) as u64);
+                &self.enemy_history, self.counter - (UPS as f32 * 0.05) as u64);
         if let Some(target_p) = r {
             return self.create_attack_motion(target_p);
+        } else {
+            let r = average_enemy_position_over_recent_ticks(
+                    &self.enemy_history, self.counter - (UPS as f32 * 0.30) as u64);
+            if let Some(target_p) = r {
+                return self.create_attack_motion(target_p);
+            }
         }
 
         // Avoid walls as a higher priority than scanning
-        if self.shortest_wall_distance < 10.0 ||
+        if self.shortest_wall_distance < 15.0 ||
                 self.shortest_wall_head_on_distance < 30.0 {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
-            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 20.0;
+            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
             self.wall_avoid_p = Some(target_p);
             let max_linear_speed = 50.0;
             let max_rotation_speed = PI * 3.0;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
-            if self.shortest_wall_head_on_distance < 30.0 {
+            if self.shortest_wall_head_on_distance < 15.0 {
+                wanted_linear_speed = -max_linear_speed * 0.2;
+            } else if self.shortest_wall_head_on_distance < 30.0 {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
                 wanted_linear_speed *= 0.2;
             }
@@ -398,18 +408,22 @@ impl BrainState {
             let point_tile = Vector2::new(x as f32 + pattern_w as f32 / 2.0,
                     y as f32 + pattern_h as f32 / 2.0);
             for line in &self.wall_lines {
+                // We don't want to scan very close to ourselves
+                let d_robot_to_point = (robot_tile - point_tile).magnitude();
+                if d_robot_to_point < 6.0 {
+                    return false;
+                }
                 // If the distance from the point to the wall is smaller than a
                 // set threshold, we don't want to investigate the point as it
                 // would be unsafe
                 let d_point_to_wall = line.distance(point_tile);
-                if d_point_to_wall < 4.0 {
+                if d_point_to_wall < 3.0 {
                     return false;
                 }
                 // If the distance from the robot to the wall is smaller than
                 // the distance from the robot to the point, then the point is
                 // beyond the wall
                 let d_robot_to_wall = line.distance(robot_tile);
-                let d_robot_to_point = (robot_tile - point_tile).magnitude();
                 if d_robot_to_wall < d_robot_to_point {
                     return false;
                 }
@@ -434,21 +448,6 @@ impl BrainState {
                             target_p, max_linear_speed, max_rotation_speed);
             // Apply motor speed modulation to get scanning data
             wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
-            /*// Stupid logic
-            if self.proximity_sensor_readings.len() >= 6 {
-                let d0 = self.proximity_sensor_readings[0].1;
-                let d1 = self.proximity_sensor_readings[1].1;
-                let d2 = self.proximity_sensor_readings[2].1;
-                let d3 = self.proximity_sensor_readings[3].1;
-                let d4 = self.proximity_sensor_readings[4].1;
-                let d5 = self.proximity_sensor_readings[5].1;
-                // Assume the first 3 sensors are pointing somewhat forward and if they
-                // all are showing short distance, don't try to push further
-                if d0 < 10.0 && d1 < 15.0 && d2 < 15.0 {
-                    wanted_linear_speed = -15.0;
-                    wanted_rotation_speed = PI * 1.0;
-                }
-            }*/
             return (wanted_linear_speed, wanted_rotation_speed);
         }
         let wanted_linear_speed = 100.0;
