@@ -412,18 +412,24 @@ impl Robot {
         //self.diagnostic_map.print(Point2::new(0.0, 0.0));
 
         for (i, line) in self.diagnostic_lines.iter().enumerate() {
+            // These lines do not have a starting or ending point. We need to
+            // create those ourselves. Use the map midpoint to project the
+            // midpoint for each line and base their endpoints on that.
+            //let robot_p_tiles = self.diagnostic_robot_p / map.tile_wh;
+            //let vtp = line.vector_to_point(robot_p_tiles.coords);
+            let map_midpoint_tiles = Point2::new(map.width as f32 / 2.0, map.height as f32 / 2.0);
+            let vtp = line.vector_to_point(map_midpoint_tiles.coords);
+            let line_midpoint = map_midpoint_tiles.coords - vtp;
             let angle_rad = line.angle.to_radians();
-            // Direction of the line normal
-            let normal_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
-            let line_point = normal_direction * line.distance;
-            let p = line_point;
-            // TODO: Draw as an actual line somehow reasonably
-            rectangle([0.8, 0.8, 0.2, 1.0],
-                    [-tile_size*0.2, -tile_size*50.0, tile_size*0.4, tile_size*100.0],
-                    transform
-                        .trans(tile_size * p.x as f64,
-                                tile_size * p.y as f64)
-                        .rot_rad(angle_rad as f64),
+            //let normal_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
+            let line_direction = Vector2::new((angle_rad + PI as f32 * 0.5).cos(),
+                    (angle_rad + PI as f32 * 0.5).sin());
+            let p1 = line_midpoint + line_direction * 15.0;
+            let p2 = line_midpoint - line_direction * 15.0;
+            piston_window::line([0.35, 0.45, 1.0, 1.0], tile_size * 0.2,
+                    [tile_size * p1.x as f64, tile_size * p1.y as f64,
+                        tile_size * p2.x as f64, tile_size * p2.y as f64],
+                    *transform,
                     g);
         }
     }

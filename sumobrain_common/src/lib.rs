@@ -179,10 +179,10 @@ impl BrainState {
                 }
             }
         }
-        if self.shortest_wall_head_on_distance < f32::MAX {
+        /*if self.shortest_wall_head_on_distance < f32::MAX {
             println!("Shortest distance to head-on wall collision: {:?}",
                     self.shortest_wall_head_on_distance);
-        }
+        }*/
 
         const IMPORTANCE_CONSTANT: f32 = 15.0;
         self.wall_avoidance_vector = Vector2::new(0.0, 0.0);
@@ -198,10 +198,10 @@ impl BrainState {
                 self.shortest_wall_distance = distance;
             }
         }
-        if self.wall_avoidance_vector.magnitude() > 0.0 {
+        /*if self.wall_avoidance_vector.magnitude() > 0.0 {
             println!("Walls (shortest distance: {:?}) would be best avoided by moving towards: {:?}",
                     self.shortest_wall_distance, self.wall_avoidance_vector);
-        }
+        }*/
 
         let mut wanted_linear_speed = 0.0;
         let mut wanted_rotation_speed = 0.0;
@@ -246,7 +246,7 @@ impl BrainState {
         // Prioritize avoiding walls
         if self.shortest_wall_distance < 15.0 ||
                 self.shortest_wall_head_on_distance < 30.0 {
-            println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
+            //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
             let target_p = self.pos + self.wall_avoidance_vector.normalize() * 30.0;
             self.wall_avoid_p = Some(target_p);
             let max_linear_speed = 50.0;
