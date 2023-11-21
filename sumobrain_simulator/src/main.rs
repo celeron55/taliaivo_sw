@@ -204,7 +204,15 @@ impl Robot {
                     let position = body.position();
                     let half_extents = shape.half_extents;
                     let rotation = position.rotation.angle();
-                    rectangle([0.8, 0.2, 0.2, 1.0], 
+                    let mut color = [0.7, 0.7, 0.7, 1.0];
+                    if !self.diagnostic_attack_p.is_none() {
+                        color = [0.6, 0.2, 0.2, 1.0];
+                    } else if !self.diagnostic_scan_p.is_none() {
+                        color = [0.2, 0.6, 0.2, 1.0];
+                    } else if !self.diagnostic_wall_avoid_p.is_none() {
+                        color = [0.2, 0.3, 0.6, 1.0];
+                    }
+                    rectangle(color, 
                               [-half_extents.x as f64 * 2.0, -half_extents.y as f64 * 2.0, 
                                half_extents.x as f64 * 2.0, half_extents.y as f64 * 2.0],
                               transform
