@@ -277,15 +277,15 @@ impl HoughLine {
         let angle_rad = self.angle.to_radians();
         let line_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
         let line_normal = Vector2::new(-line_direction.y, line_direction.x);
-        let line_point = line_direction * self.distance;
+        let line_point = line_normal * self.distance;
 
         // Project the point onto the line normal
-        let point_to_line = line_point - point;
+        let point_to_line = point - line_point;
         let projected_length = point_to_line.dot(&line_normal);
-        let closest_point_on_line = point + line_normal * projected_length;
+        let closest_point_on_line = line_point + line_normal * projected_length;
 
-        // The vector from the point to the closest point on the line
-        closest_point_on_line - point
+        // The vector from the closest point on the line to the point
+        point - closest_point_on_line
     }
 }
 
