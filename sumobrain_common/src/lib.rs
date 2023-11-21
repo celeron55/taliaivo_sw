@@ -62,7 +62,8 @@ fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -
 
 fn average_enemy_position_over_recent_ticks(
         buffer: &ConstGenericRingBuffer<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
-        min_tick: u64) -> Option<Point2<f32>> {
+        current_tick: u64, max_age: u64) -> Option<Point2<f32>> {
+    let min_tick = current_tick - max_age;
     let mut sum_position = Point2::new(0.0, 0.0);
     let mut count = 0;
 
@@ -349,12 +350,12 @@ impl BrainState {
         // See if the enemy history ringbuffer looks such that we can determine
         // where the enemy is. If so, attack the enemy.
         let r = average_enemy_position_over_recent_ticks(
-                &self.enemy_history, self.counter - (UPS as f32 * 0.05) as u64);
+                &self.enemy_history, self.counter, (UPS as f32 * 0.05) as u64);
         if let Some(target_p) = r {
             return self.create_attack_motion(target_p);
         } else {
             let r = average_enemy_position_over_recent_ticks(
-                    &self.enemy_history, self.counter - (UPS as f32 * 0.30) as u64);
+                    &self.enemy_history, self.counter, (UPS as f32 * 0.30) as u64);
             if let Some(target_p) = r {
                 return self.create_attack_motion(target_p);
             }
