@@ -67,7 +67,7 @@ impl RobotInterface for Robot {
 
     // R/C Receiver Inputs
     // Returns values from all R/C receiver channels
-    fn get_rc_input_values(&self, values: &mut[&f32]) {
+    fn get_rc_input_values(&self, _values: &mut[&f32]) {
         // TODO
     }
 
@@ -91,12 +91,12 @@ impl RobotInterface for Robot {
         return (0.0, 0.0, 0.0);
     }
     // Voltages of individual cells
-    fn get_battery_cell_voltages(&self, values: &mut[&f32]) {
+    fn get_battery_cell_voltages(&self, _values: &mut[&f32]) {
         // TODO
     }
 
     // LED control
-    fn set_led_status(&mut self, status: bool) {
+    fn set_led_status(&mut self, _status: bool) {
         // TODO
     }
 
@@ -177,7 +177,7 @@ impl Robot {
         self.blade_handle = Some(blade_handle);
     }
 
-    fn draw(&self, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet, c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2]) {
+    fn draw(&self, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet, _c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2]) {
         if let Some(blade_handle) = self.blade_handle {
             if let Some(blade_body) = rigid_body_set.get(blade_handle) {
                 if let Some(collider) = collider_set.get(blade_body.colliders()[0]) {
@@ -346,7 +346,7 @@ impl Robot {
                 let stop_at_penetration = true;
                 let filter = QueryFilter::new().groups(self.interaction_groups);
 
-                if let Some((handle, hit)) = query_pipeline.cast_shape(
+                if let Some((_handle, hit)) = query_pipeline.cast_shape(
                     &rigid_body_set, &collider_set, &shape_pos, &shape_vel, &shape, max_toi, stop_at_penetration, filter
                 ) {
                     // The first collider hit has the handle `handle`. The `hit` is a
@@ -361,7 +361,7 @@ impl Robot {
 		}
     }
 
-    fn draw_map(&self, c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2], tile_size: f64) {
+    fn draw_map(&self, _c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2], tile_size: f64) {
         let map = &self.diagnostic_map;
         for y in 0..map.height {
             for x in 0..map.width {
@@ -420,7 +420,7 @@ impl Robot {
 
         //self.diagnostic_map.print(Point2::new(0.0, 0.0));
 
-        for (i, line) in self.diagnostic_wall_lines.iter().enumerate() {
+        for (_i, line) in self.diagnostic_wall_lines.iter().enumerate() {
             // These lines do not have a starting or ending point. We need to
             // create those ourselves. Use the map midpoint to project the
             // midpoint for each line and base their endpoints on that.
@@ -460,7 +460,7 @@ impl ArenaWall {
         ArenaWall { body_handle: wall_handle }
     }
 
-    fn draw(&self, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet, c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2]) {
+    fn draw(&self, rigid_body_set: &RigidBodySet, collider_set: &ColliderSet, _c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2]) {
         if let Some(wall_body) = rigid_body_set.get(self.body_handle) {
             if let Some(collider) = collider_set.get(wall_body.colliders()[0]) {
                 if let Some(shape) = collider.shape().as_cuboid() {
@@ -547,7 +547,7 @@ impl KeyboardController {
             robot.wheel_speed_right += turn_speed;
         }
 
-        robot.weapon_throttle = { if self.t_toggle { 100.0 } else { 0.0 } };
+        robot.weapon_throttle = if self.t_toggle { 100.0 } else { 0.0 };
 
         // Clear some diagnostic info
         robot.diagnostic_attack_p = None;
