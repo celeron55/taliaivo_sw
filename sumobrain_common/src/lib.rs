@@ -250,10 +250,10 @@ impl BrainState {
         // Rotation has to be prioritized, thus if the wanted wheel speed
         // difference wasn't applied, force it, ignoring acceleration
         // TODO: Rethink this
-        /*let avg_applied_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
+        let avg_applied_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
         let wanted_difference = wanted_wheel_speed_left - wanted_wheel_speed_right;
         self.applied_wheel_speed_left = avg_applied_speed + wanted_difference / 2.0;
-        self.applied_wheel_speed_right = avg_applied_speed - wanted_difference / 2.0;*/
+        self.applied_wheel_speed_right = avg_applied_speed - wanted_difference / 2.0;
 
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 

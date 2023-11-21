@@ -326,6 +326,7 @@ impl Robot {
 
         // Proximity sensors
         let position_sensor_angles = [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+        //let position_sensor_angles = [0.0, -45.0, 45.0, -135.0, 135.0, 180.0];
         let max_detection_distance: f32 = 40.0;
 
         if let Some(body) = rigid_body_set.get(self.body_handle) {
