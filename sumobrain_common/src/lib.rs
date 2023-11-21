@@ -151,10 +151,10 @@ impl BrainState {
         }
 
         let mut lines = self.map.hough_transform();
-        for line in &lines {
+        /*for line in &lines {
             println!("HoughLine: angle={:?} distance={:?} votes={:?}",
                     line.angle, line.distance, line.votes);
-        }
+        }*/
 
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
                 self.wall_avoid_p, &lines);
