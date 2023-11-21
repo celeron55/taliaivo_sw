@@ -486,6 +486,7 @@ struct KeyboardController {
     down: bool,
     left: bool,
     right: bool,
+    t_toggle: bool,
 }
 
 impl KeyboardController {
@@ -495,6 +496,7 @@ impl KeyboardController {
             down: false,
             left: false,
             right: false,
+            t_toggle: true,
         }
     }
 
@@ -505,6 +507,7 @@ impl KeyboardController {
                 Key::Down => self.down = true,
                 Key::Left => self.left = true,
                 Key::Right => self.right = true,
+                Key::T => self.t_toggle = !self.t_toggle,
                 _ => {}
             }
         }
@@ -544,7 +547,7 @@ impl KeyboardController {
             robot.wheel_speed_right += turn_speed;
         }
 
-        robot.weapon_throttle = 100.0;
+        robot.weapon_throttle = { if self.t_toggle { 100.0 } else { 0.0 } };
 
         // Clear some diagnostic info
         robot.diagnostic_attack_p = None;
