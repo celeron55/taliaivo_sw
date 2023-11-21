@@ -17,6 +17,8 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 33; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
+const SIMULATE_LIDAR: bool = false;
+
 const GROUP_ARENA:         u32 = 0b00001000;
 const GROUP_ROBOT0_BODY:   u32 = 0b00000001;
 const GROUP_ROBOT1_BODY:   u32 = 0b00000010;
@@ -317,7 +319,7 @@ impl Robot {
     }
 
     fn update_sensors(&mut self, query_pipeline: &mut QueryPipeline, collider_set: &ColliderSet,
-            rigid_body_set: &RigidBodySet) {
+            rigid_body_set: &RigidBodySet, tick_count: u64) {
 
         // Gyroscope
         if let Some(body) = rigid_body_set.get(self.body_handle) {
@@ -325,9 +327,23 @@ impl Robot {
         }
 
         // Proximity sensors
-        let position_sensor_angles = [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
-        //let position_sensor_angles = [0.0, -45.0, 45.0, -135.0, 135.0, 180.0];
+
         let max_detection_distance: f32 = 40.0;
+
+        let position_sensor_angles = if SIMULATE_LIDAR {
+            // Simulate a lidar turret (have to have the same number of entries)
+            [
+                (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
+                (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
+                (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
+                (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
+                (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
+                (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
+            ]
+        } else {
+            [0.0, -45.0, 45.0, -90.0, 90.0, 180.0]
+            //[0.0, -45.0, 45.0, -135.0, 135.0, 180.0]
+        };
 
         if let Some(body) = rigid_body_set.get(self.body_handle) {
             let robot_orientation = body.position().rotation;
@@ -684,7 +700,7 @@ fn main() {
 
             for robot in &mut robots {
                 robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
-                robot.update_sensors(&mut query_pipeline, &collider_set, &rigid_body_set);
+                robot.update_sensors(&mut query_pipeline, &collider_set, &rigid_body_set, counter);
             }
 
             physics_pipeline.step(
