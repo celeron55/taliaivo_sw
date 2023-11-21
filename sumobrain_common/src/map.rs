@@ -132,19 +132,22 @@ impl Map {
         }
     }
 
-    pub fn find_pattern(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32,
-            ignore_map_below_significance: f32, score_for_ignore: f32)
-            -> Option<(u32, u32, f32)> {
+    pub fn find_pattern<F>(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32,
+            ignore_map_below_significance: f32, score_for_ignore: f32, filter: F)
+            -> Option<(u32, u32, f32)>
+    where F: Fn(u32, u32) -> bool {
         let mut best_match = None;
         let mut best_score = f32::MAX;
 
         for y in 0..self.height.saturating_sub(pattern_height) {
             for x in 0..self.width.saturating_sub(pattern_width) {
-                let score = self.calculate_match_score(x, y, pattern, pattern_width, pattern_height,
-                        ignore_map_below_significance, score_for_ignore);
-                if score < best_score {
-                    best_score = score;
-                    best_match = Some((x, y, score));
+                if filter(x, y) {
+                    let score = self.calculate_match_score(x, y, pattern, pattern_width, pattern_height,
+                            ignore_map_below_significance, score_for_ignore);
+                    if score < best_score {
+                        best_score = score;
+                        best_match = Some((x, y, score));
+                    }
                 }
             }
         }
@@ -241,7 +244,7 @@ const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
-const HOUGH_THRESHOLD: usize = 10;
+const HOUGH_THRESHOLD: usize = 11;
 const KEEP_NUM_TOP_LINES: usize = 8;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const EDGE_MIN_POS: f32 = 50.0;

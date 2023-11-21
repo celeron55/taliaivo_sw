@@ -241,8 +241,7 @@ impl BrainState {
         let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
 
         // Limit wheel speed changes, i.e. limit acceleration
-        //let max_accel = 250.0 / UPS as f32;
-        let max_accel = 333.3 / UPS as f32;
+        let max_accel = 250.0 / UPS as f32;
         self.applied_wheel_speed_left = limit_acceleration(self.applied_wheel_speed_left,
                 wanted_wheel_speed_left, max_accel);
         self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
@@ -354,14 +353,14 @@ impl BrainState {
         if let Some(target_p) = r {
             return self.create_attack_motion(target_p);
         } else {
-            let r = average_enemy_position_over_recent_ticks(
+            /*let r = average_enemy_position_over_recent_ticks(
                     &self.enemy_history, self.counter - (UPS as f32 * 0.30) as u64);
             if let Some(target_p) = r {
                 return self.create_attack_motion(target_p);
-            }
+            }*/
         }
 
-        // Avoid walls as a higher priority than scanning
+        /*// Avoid walls as a higher priority than scanning
         if self.shortest_wall_distance < 15.0 ||
                 self.shortest_wall_head_on_distance < 30.0 {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
@@ -372,14 +371,14 @@ impl BrainState {
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
-            if self.shortest_wall_head_on_distance < 15.0 {
+            if self.shortest_wall_head_on_distance < 20.0 {
                 wanted_linear_speed = -max_linear_speed * 0.2;
             } else if self.shortest_wall_head_on_distance < 30.0 {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
                 wanted_linear_speed *= 0.2;
             }
             return (wanted_linear_speed, wanted_rotation_speed);
-        }
+        }*/
 
         //println!("scan");
         self.attack_step_count = 0;
@@ -393,12 +392,12 @@ impl BrainState {
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
-            false, false, false, false, false, false,
-            false, false, false, false, false, false,
-            false, false, false, false, false, false,
-            false, false, false, false, false, false,
-            false, false, false, false, false, false,
-            false, false, false, false, false, false,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
+            -50.0, -50.0, -50.0, -50.0, -50.0, -50.0,
         ];
         // Filter out positions that are behind or close to walls
         let robot_tile = self.pos.coords * (1.0 / self.map.tile_wh);
@@ -410,7 +409,7 @@ impl BrainState {
             for line in &self.wall_lines {
                 // We don't want to scan very close to ourselves
                 let d_robot_to_point = (robot_tile - point_tile).magnitude();
-                if d_robot_to_point < 6.0 {
+                if d_robot_to_point < 4.0 {
                     return false;
                 }
                 // If the distance from the point to the wall is smaller than a
@@ -430,10 +429,10 @@ impl BrainState {
             }
             true
         };
-        // NOTE: A bit more priority (negative score) is put on forgotten area
-        // in order to generate exploration targets
-        let result_maybe = self.map.find_binary_pattern(
-                &pattern, pattern_w, pattern_h, 50.0, -0.5, None, wall_filter);
+        // A bit more priority (negative score) is put on forgotten area in
+        // order to generate exploration targets
+        let result_maybe = self.map.find_pattern(
+                &pattern, pattern_w, pattern_h, 50.0, -0.1, wall_filter);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
@@ -450,8 +449,11 @@ impl BrainState {
             wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
             return (wanted_linear_speed, wanted_rotation_speed);
         }
-        let wanted_linear_speed = 100.0;
-        let wanted_rotation_speed = PI * 1.0;
+
+        //let wanted_linear_speed = 100.0;
+        //let wanted_rotation_speed = PI * 1.0;
+        let wanted_linear_speed = 0.0;
+        let wanted_rotation_speed = PI * 3.0;
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
