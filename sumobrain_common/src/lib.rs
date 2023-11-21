@@ -333,6 +333,13 @@ impl BrainState {
             let point_tile = Vector2::new(x as f32 + pattern_w as f32 / 2.0,
                     y as f32 + pattern_h as f32 / 2.0);
             for line in &self.wall_lines {
+                // If the distance from the point to the wall is smaller than a
+                // set threshold, we don't want to investigate the point as it
+                // would be unsafe
+                let d_point_to_wall = line.distance(point_tile);
+                if d_point_to_wall < 4.0 {
+                    return false;
+                }
                 // If the distance from the robot to the wall is smaller than
                 // the distance from the robot to the point, then the point is
                 // beyond the wall
