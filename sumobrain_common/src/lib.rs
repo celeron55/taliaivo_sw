@@ -208,6 +208,7 @@ impl BrainState {
 
         //println!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
 
+        // 0.998 works for keeping up to date with a 125x125cm arena
         self.map.global_forget(0.998);
 
         if gyro_z.abs() > PI * 5.0 {
