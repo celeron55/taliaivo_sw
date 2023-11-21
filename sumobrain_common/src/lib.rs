@@ -216,7 +216,14 @@ impl BrainState {
         }
 
         for reading in &self.proximity_sensor_readings {
-            self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
+            let maybe_newly_occupied = self.map.paint_proximity_reading(
+                    self.pos, reading.0 + self.rot, reading.1, reading.2);
+            if let Some(newly_occupied_p) = maybe_newly_occupied {
+                // TODO: Detect when new positions are being occupied in a
+                // straight or squiggly trail. That is indicative of another
+                // robot being on the move.
+                println!("Newly occupied: {:?}", newly_occupied_p);
+            }
         }
 
         self.wall_lines = self.map.hough_transform();
