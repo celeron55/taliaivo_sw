@@ -120,6 +120,18 @@ fn average_enemy_position_and_velocity_over_recent_ticks(
     }
 }
 
+// Works in tile units
+fn tile_is_close_to_wall(p: Point2<f32>,
+        wall_lines: &ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>,
+        threshold_distance: f32) -> bool {
+    for line in wall_lines {
+        if line.distance(p.coords) < threshold_distance {
+            return true;
+        }
+    }
+    return false;
+}
+
 pub struct BrainState {
     seed: u32,
     counter: u64,
@@ -220,19 +232,28 @@ impl BrainState {
                     self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
             if let Some(newly_occupied_p) = maybe_newly_occupied {
                 println!("Newly occupied: {:?}", newly_occupied_p);
-                // TODO: Filter out point if it is close to a wall
-                // Detect if the newly occupied point behind us regarding to our
-                // movement direction. That would mean it is likely the newly
-                // occupied point was not caused by our movement and instead it
-                // is the enemy trying to catch up on us. If it is such a point,
-                // add it to enemy_history.
-                let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
-                let newly_occupied_p_world = Point2::new(
-                        newly_occupied_p.x as f32 * self.map.tile_wh,
-                        newly_occupied_p.y as f32 * self.map.tile_wh);
-                let point_direction_vector = newly_occupied_p_world - self.pos;
-                if robot_direction_vector.dot(&point_direction_vector) < 0.0 {
-                    self.enemy_history.push((self.counter, newly_occupied_p_world));
+                // Filter out point if it is close to a wall
+                let newly_occupied_p_f = Point2::new(
+                        newly_occupied_p.x as f32,
+                        newly_occupied_p.y as f32);
+                if !tile_is_close_to_wall(newly_occupied_p_f, &self.wall_lines, 3.0) {
+                    // Detect if the newly occupied point behind us regarding to our
+                    // movement direction. That would mean it is likely the newly
+                    // occupied point was not caused by our movement and instead it
+                    // is the enemy trying to catch up on us. If it is such a point,
+                    // add it to enemy_history.
+                    //let robot_rotation_vector = Vector2::new(self.rot.cos(), self.rot.sin());
+                    let robot_direction_vector = self.vel;
+                    let newly_occupied_p_world = Point2::new(
+                            newly_occupied_p.x as f32 * self.map.tile_wh,
+                            newly_occupied_p.y as f32 * self.map.tile_wh);
+                    let point_direction_vector = newly_occupied_p_world - self.pos;
+                    if robot_direction_vector.dot(&point_direction_vector) < 0.0 {
+                        self.enemy_history.push((self.counter, newly_occupied_p_world));
+                    }
+                    //println!("Isn't close to wall");
+                } else {
+                    //println!("Is close to wall");
                 }
             }
         }
