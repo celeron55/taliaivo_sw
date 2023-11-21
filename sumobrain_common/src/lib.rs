@@ -180,7 +180,6 @@ impl BrainState {
     // Should be called at 1.0s / UPS interval
     pub fn update(&mut self, robot: &mut dyn RobotInterface) {
         // Move robot closer to the center of map if it's near an edge
-        let edge = 20.0;
         if (self.pos.x - MAP_W_REAL / 2.0).abs() > MAP_W_REAL / 4.0 ||
                 (self.pos.y - MAP_H_REAL / 2.0).abs() > MAP_H_REAL / 4.0 {
             let ideal_translate = Point2::new(MAP_W_REAL/2.0, MAP_H_REAL/2.0) - self.pos;
