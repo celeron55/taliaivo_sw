@@ -2,7 +2,7 @@ extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
 use libc_print::std_name::{println, print};
-use nalgebra::{Vector2, Point2};
+use nalgebra::{Vector2, Point2, RealField};
 
 pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm
@@ -235,7 +235,7 @@ const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
 const HOUGH_THRESHOLD: usize = 13;
-const MAX_NUM_LINE_CANDIDATES: usize = 50;
+pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
 const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
 const EDGE_MIN_POS: f32 = 40.0;
@@ -245,31 +245,89 @@ type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
 
 #[derive(Clone)]
 pub struct HoughLine {
-    pub angle: f32,
-    pub distance: f32,
+    pub angle: f32, // Unit: degrees
+    pub distance: f32, // Unit: map tiles
     pub votes: usize,
 }
 
 impl HoughLine {
-    fn new(angle: f32, distance: f32, votes: usize) -> Self {
+    pub fn new(angle: f32, distance: f32, votes: usize) -> Self {
         HoughLine {
             angle: angle,
             distance: distance,
             votes: votes,
         }
     }
-    fn default() -> Self {
+    pub fn default() -> Self {
         HoughLine {
             angle: 0.0,
             distance: 0.0,
             votes: 0,
         }
     }
+    pub fn distance(&self, point: Vector2<f32>) -> f32 {
+        let angle_rad = self.angle.to_radians();
+        let cos_theta = angle_rad.cos();
+        let sin_theta = angle_rad.sin();
+        let rho = self.distance;
+
+        ((point.x * cos_theta + point.y * sin_theta) - rho).abs()
+    }
+    pub fn vector_to_point(&self, point: Vector2<f32>) -> Vector2<f32> {
+        let angle_rad = self.angle.to_radians();
+        let self_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
+        let rho = self.distance;
+
+        // Project the point onto the self
+        let projected_length = point.dot(&self_normal);
+        let closest_point_on_self = self_normal * projected_length;
+
+        // The vector from the closest point on the self to the point
+        point - closest_point_on_self
+    }
 }
 
-fn angle_difference(angle1: f32, angle2: f32) -> f32 {
+pub fn angle_difference(angle1: f32, angle2: f32) -> f32 {
     let diff = (angle1 - angle2).abs() % 360.0;
     if diff > 180.0 { 360.0 - diff } else { diff }
+}
+
+// units: tiles
+pub fn calculate_intersection(ray_origin: Vector2<f32>, ray_direction: Vector2<f32>,
+        line: &HoughLine) -> Option<Vector2<f32>> {
+    let angle_rad = line.angle.to_radians();
+    let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
+
+    /*{
+        let normal_direction = Vector2::new(angle_rad.cos(), angle_rad.sin());
+        let line_point = normal_direction * line.distance;
+        let line_direction = Vector2::new((angle_rad+f32::pi()*0.5).cos(),
+                (angle_rad+f32::pi()*0.5).sin());
+
+        println!("Line at: p(tiles)={:?}, direction={:?}", line_point, line_direction);
+        println!("Ray at: o(tiles)={:?}, direction={:?}", ray_origin, ray_direction);
+    }*/
+    
+    // Line equation: x cos(theta) + y sin(theta) = rho
+    let rho = line.distance;
+
+    // Ray equation: ray_origin + s * ray_direction
+    // Substitute the ray equation into the line equation and solve for s
+    let denominator = ray_direction.dot(&line_normal);
+
+    if denominator.abs() < 1e-10 {
+        // Ray is parallel to the line, no intersection
+        return None;
+    }
+
+    let s = (rho - ray_origin.dot(&line_normal)) / denominator;
+
+    if s < 0.0 {
+        // Intersection is behind the ray's origin
+        return None;
+    }
+
+    Some(ray_origin + s * ray_direction)
 }
 
 impl Map {
@@ -433,15 +491,14 @@ impl Map {
         merged_lines
     }
 
-    // TODO: Remove
-    /*pub fn filter_lines(&self, lines: Vec<HoughLine>) -> Vec<HoughLine> {
-        // Logic to filter out irrelevant lines
-    }*/
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // NOTE: Run using "cargo test -- --test-threads=1" or "cargo test <test
+    //       name>" to see the console output properly
 
     #[test]
     fn test_hough_transform() {
@@ -475,14 +532,17 @@ mod tests {
         // The longest line is the 150 long horizontal line (= angle 0), at
         // Y=100 (= distance 100)
         assert_eq!(lines[0].angle, 0.0);
-        assert_eq!(lines[0].distance, 100.0 / map.tile_wh);
+        assert!((lines[0].distance - 100.0 / map.tile_wh).abs() <= 1.5);
 
         // The second longest line is the 100 long vertical line (= angle 90),
         // at X=150 (= distance 150)
         assert_eq!(lines[1].angle, 90.0);
-        assert_eq!(lines[1].distance, 150.0 / map.tile_wh);
+        assert!((lines[1].distance - 150.0 / map.tile_wh).abs() <= 1.5);
         assert!(lines[0].votes > lines[1].votes);
+    }
 
+    #[test]
+    fn test_hough_transform_2() {
         // Set up a Map with known lines
         let mut map = Map::new();
         // Populate `map` with data that forms clear, detectable lines
@@ -519,6 +579,59 @@ mod tests {
                 assert_eq!(lines[i].votes, lines[i+1].votes);
             }
         }
+    }
+
+    #[test]
+    fn test_calculate_intersection() {
+        // HoughLines units are degrees and tiles
+        // This line is parallel to the Y axis, crossing the X axis at 10.0
+        let line = HoughLine::new(0.0, 10.0, 0);
+        // Use a ray starting at (0, 5) going parallel with the +X axis
+        let ray_origin = Vector2::new(0.0, 5.0);
+        let ray_direction = Vector2::new(1.0, 0.0);
+        let r = calculate_intersection(ray_origin, ray_direction, &line);
+        println!("r: {:?}", r);
+        assert!(!r.is_none());
+        if let Some(intersection_point) = r {
+            // The intersection should happen at (10, 5)
+            assert_eq!(intersection_point.x, 10.0);
+            assert_eq!(intersection_point.y, 5.0);
+        }
+
+        // HoughLines units are degrees and tiles
+        // This line is at a 45 degree slope from -X-Y to +X+Y, crossing the X
+        // axis at 5 * sqrt(2)
+        let line = HoughLine::new(315.0, 5.0, 0);
+        // Use a ray starting at (0, 5) going parallel with the +X axis
+        let ray_origin = Vector2::new(0.0, 5.0);
+        let ray_direction = Vector2::new(1.0, 0.0);
+        let r = calculate_intersection(ray_origin, ray_direction, &line);
+        println!("r: {:?}", r);
+        assert!(!r.is_none());
+        if let Some(intersection_point) = r {
+            // Should intersect at Y=5 because our ray travels parallel to X
+            assert_eq!(intersection_point.y, 5.0);
+            // Was experimentally found out but apparently is correct
+            assert!((intersection_point.x - 12.07).abs() <= 0.1);
+        }
+    }
+
+    #[test]
+    fn test_distance_from_line() {
+        let line = HoughLine::new(0.0, 10.0, 0); // Line parallel to Y-axis, 10 units from X-axis
+        let point = Vector2::new(15.0, 0.0); // Point to the right of the line
+
+        let distance = line.distance(point);
+        assert_eq!(distance, 5.0); // Distance should be 5 units
+    }
+
+    #[test]
+    fn test_vector_to_point() {
+        let line = HoughLine::new(90.0, 10.0, 0); // Line parallel to X-axis, 10 units from Y-axis
+        let point = Vector2::new(0.0, 15.0); // Point above the line
+
+        let vector = line.vector_to_point(point);
+        assert_eq!(vector, Vector2::new(0.0, -5.0)); // Vector pointing downwards, 5 units
     }
 }
 

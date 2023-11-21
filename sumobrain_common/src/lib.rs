@@ -105,7 +105,7 @@ impl BrainState {
         }
 
         let (gyro_x, gyro_y, gyro_z) = robot.get_gyroscope_reading();
-        println!("gyro_z: {:?}", gyro_z);
+        //println!("gyro_z: {:?}", gyro_z);
 
         // TODO: Make sure this is scaled appropriately
         self.rot += gyro_z / UPS as f32;
@@ -148,7 +148,41 @@ impl BrainState {
 
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p, &lines);
 
-        // TODO: Avoid walls as found by hough_transform
+        // TODO
+        // Avoid walls as found by hough_transform
+        let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
+        let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
+        let mut shortest_distance: f32 = f32::MAX;
+        // TODO: Instead of or in addition to measuring head-on distance, just
+        //       measure distance from walls to any direction?
+        const AVOID_WALL_HEAD_ON_DISTANCE: f32 = 30.0; // cm
+        const IMPORTANCE_CONSTANT: f32 = 1.0; // tiles
+        let mut wall_avoidance_vector = Vector2::new(0.0, 0.0);
+        //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
+        for line in lines {
+            if let Some(intersection_point_tiles) = calculate_intersection(
+                    robot_tile_position, robot_direction_vector, &line) {
+                let distance_tiles = (robot_tile_position - intersection_point_tiles).magnitude();
+                /*println!("On trajectory to hit: p(tiles)={:?}, distance(tiles)={:?}",
+                        intersection_point_tiles, distance_tiles);*/
+                let distance = distance_tiles * self.map.tile_wh;
+                let intersection_point = intersection_point_tiles * self.map.tile_wh;
+                if distance < shortest_distance {
+                    shortest_distance = distance;
+                }
+            }
+
+            let vector_from_wall_to_robot = line.vector_to_point(robot_tile_position);
+            let distance_from_line_tiles = vector_from_wall_to_robot.magnitude();
+            let importance = 1.0 / (distance_from_line_tiles + IMPORTANCE_CONSTANT);
+            wall_avoidance_vector += vector_from_wall_to_robot * importance;
+        }
+        if shortest_distance < f32::MAX {
+            println!("Shortest distance to wall collision: {:?}", shortest_distance);
+        }
+        if wall_avoidance_vector.magnitude() > 0.0 {
+            println!("Walls would be best avoided by moving towards: {:?}", wall_avoidance_vector);
+        }
 
         let mut wanted_linear_speed = 0.0;
         let mut wanted_rotation_speed = 0.0;
@@ -224,20 +258,19 @@ impl BrainState {
                 &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights));
         if let Some(result) = result_maybe {
             let score = result.2;
-            println!("score: {:?}", score);
+            //println!("score: {:?}", score);
             if score < score_requirement {
                 // Target the center of the pattern
                 let target_p = Point2::new(
                     (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
                     (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
                 );
-                //println!("target_p: {:?}", target_p);
-                println!("attack {:?}", target_p);
+                //println!("attack {:?}", target_p);
                 return self.create_attack_motion(target_p);
             }
         }
 
-        println!("scan");
+        //println!("scan");
         self.attack_step_count = 0;
         return self.create_scanning_motion();
     }
