@@ -564,6 +564,7 @@ fn main() {
 
     let event_settings = EventSettings::new().max_fps(FPS).ups(PLAY_UPS);
     let mut events = Events::new(event_settings);
+    window.events = events;
 
     let gravity = Vector2::new(0.0, 0.0); // No gravity in a top-down view
     let integration_parameters = {
@@ -627,7 +628,7 @@ fn main() {
 
     let mut counter: u64 = 0;
 
-    while let Some(e) = events.next(&mut window) {
+    while let Some(e) = window.next() {
         if e.render_args().is_some() {
             window.draw_2d(&e, |c, g, _| {
                 clear([0.1; 4], g);
