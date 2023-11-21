@@ -630,7 +630,9 @@ mod tests {
         let point = Vector2::new(0.0, 15.0); // Point above the line
 
         let vector = line.vector_to_point(point);
-        assert_eq!(vector, Vector2::new(0.0, -5.0)); // Vector pointing downwards, 5 units
+        // Vector pointing downwards, 5 units
+        assert!((vector.x - 0.0).abs() < 1e-6);
+        assert_eq!(vector.y, -5.0);
     }
 }
 
