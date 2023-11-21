@@ -360,9 +360,9 @@ impl BrainState {
             }*/
         }
 
-        /*// Avoid walls as a higher priority than scanning
+        // Avoid walls as a higher priority than scanning
         if self.shortest_wall_distance < 15.0 ||
-                self.shortest_wall_head_on_distance < 30.0 {
+                self.shortest_wall_head_on_distance < 40.0 {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
             let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
             self.wall_avoid_p = Some(target_p);
@@ -373,12 +373,12 @@ impl BrainState {
                             target_p, max_linear_speed, max_rotation_speed);
             if self.shortest_wall_head_on_distance < 20.0 {
                 wanted_linear_speed = -max_linear_speed * 0.2;
-            } else if self.shortest_wall_head_on_distance < 30.0 {
+            } else if self.shortest_wall_head_on_distance < 40.0 {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
                 wanted_linear_speed *= 0.2;
             }
             return (wanted_linear_speed, wanted_rotation_speed);
-        }*/
+        }
 
         //println!("scan");
         self.attack_step_count = 0;
@@ -408,23 +408,27 @@ impl BrainState {
                     y as f32 + pattern_h as f32 / 2.0);
             for line in &self.wall_lines {
                 // We don't want to scan very close to ourselves
-                let d_robot_to_point = (robot_tile - point_tile).magnitude();
+                let v_robot_to_point = point_tile - robot_tile;
+                let d_robot_to_point = v_robot_to_point.magnitude();
                 if d_robot_to_point < 4.0 {
                     return false;
                 }
+
                 // If the distance from the point to the wall is smaller than a
                 // set threshold, we don't want to investigate the point as it
                 // would be unsafe
                 let d_point_to_wall = line.distance(point_tile);
-                if d_point_to_wall < 3.0 {
+                if d_point_to_wall < 6.0 {
                     return false;
                 }
-                // If the distance from the robot to the wall is smaller than
-                // the distance from the robot to the point, then the point is
-                // beyond the wall
-                let d_robot_to_wall = line.distance(robot_tile);
-                if d_robot_to_wall < d_robot_to_point {
-                    return false;
+
+                // Check whether the wall is between the robot and the point
+                if let Some(intersection_tile) = calculate_intersection(
+                        robot_tile, v_robot_to_point, &line) {
+                    let distance_tiles = (robot_tile - intersection_tile).magnitude();
+                    if distance_tiles < d_robot_to_point {
+                        return false
+                    }
                 }
             }
             true
