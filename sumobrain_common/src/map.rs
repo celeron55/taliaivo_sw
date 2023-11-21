@@ -173,22 +173,29 @@ impl Map {
 
         score
     }
+}
 
-    pub fn find_binary_pattern(&self, pattern: &[bool], pattern_width: u32, pattern_height: u32,
+pub fn accept_any_xy(x: u32, y: u32) -> bool { true }
+
+impl Map {
+    pub fn find_binary_pattern<F>(&self, pattern: &[bool], pattern_width: u32, pattern_height: u32,
             ignore_map_below_significance: f32, score_for_ignore: f32,
-            weights: Option<&[f32]>)
-            -> Option<(u32, u32, f32)> {
+            weights: Option<&[f32]>, filter: F)
+            -> Option<(u32, u32, f32)>
+    where F: Fn(u32, u32) -> bool {
         let mut best_match = None;
         let mut best_score = f32::MAX;
 
         for y in 0..self.height.saturating_sub(pattern_height) {
             for x in 0..self.width.saturating_sub(pattern_width) {
-                let score = self.calculate_binary_match_score(
-                        x, y, pattern, pattern_width, pattern_height,
-                        ignore_map_below_significance, score_for_ignore, weights);
-                if score < best_score {
-                    best_score = score;
-                    best_match = Some((x, y, score));
+                if filter(x, y) {
+                    let score = self.calculate_binary_match_score(
+                            x, y, pattern, pattern_width, pattern_height,
+                            ignore_map_below_significance, score_for_ignore, weights);
+                    if score < best_score {
+                        best_score = score;
+                        best_match = Some((x, y, score));
+                    }
                 }
             }
         }
@@ -234,7 +241,7 @@ const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
-const HOUGH_THRESHOLD: usize = 13;
+const HOUGH_THRESHOLD: usize = 11;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
 const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;

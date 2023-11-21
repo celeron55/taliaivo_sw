@@ -39,7 +39,7 @@ struct Robot {
     diagnostic_attack_p: Option<Point2<f32>>,
     diagnostic_scan_p: Option<Point2<f32>>,
     diagnostic_wall_avoid_p: Option<Point2<f32>>,
-    diagnostic_lines: Vec<HoughLine>,
+    diagnostic_wall_lines: Vec<HoughLine>,
     interaction_groups: InteractionGroups,
 }
 
@@ -105,14 +105,14 @@ impl RobotInterface for Robot {
             attack_p: Option<Point2<f32>>,
             scan_p: Option<Point2<f32>>,
             wall_avoid_p: Option<Point2<f32>>,
-            lines: &[HoughLine]) {
+            wall_lines: &[HoughLine]) {
         self.diagnostic_map = map.clone();
         self.diagnostic_robot_p = robot_p;
         self.diagnostic_robot_r = robot_r;
         self.diagnostic_attack_p = attack_p;
         self.diagnostic_scan_p = scan_p;
         self.diagnostic_wall_avoid_p = wall_avoid_p;
-        self.diagnostic_lines = lines.to_vec();
+        self.diagnostic_wall_lines = wall_lines.to_vec();
     }
 }
 
@@ -148,7 +148,7 @@ impl Robot {
             diagnostic_attack_p: None,
             diagnostic_scan_p: None,
             diagnostic_wall_avoid_p: None,
-            diagnostic_lines: Vec::new(),
+            diagnostic_wall_lines: Vec::new(),
             interaction_groups: interaction_groups,
         }
     }
@@ -411,7 +411,7 @@ impl Robot {
 
         //self.diagnostic_map.print(Point2::new(0.0, 0.0));
 
-        for (i, line) in self.diagnostic_lines.iter().enumerate() {
+        for (i, line) in self.diagnostic_wall_lines.iter().enumerate() {
             // These lines do not have a starting or ending point. We need to
             // create those ourselves. Use the map midpoint to project the
             // midpoint for each line and base their endpoints on that.
@@ -574,7 +574,7 @@ fn main() {
 
         if e.update_args().is_some() {
             brain.update(&mut robots[0]);
-            brain2.update(&mut robots[1]);
+            //brain2.update(&mut robots[1]);
 
             for robot in &mut robots {
                 if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {

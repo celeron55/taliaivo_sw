@@ -37,7 +37,7 @@ pub trait RobotInterface {
             attack_p: Option<Point2<f32>>,
             scan_p: Option<Point2<f32>>,
             wall_avoid_p: Option<Point2<f32>>,
-            lines: &[HoughLine]);
+            wall_lines: &[HoughLine]);
 }
 
 pub const UPS: u32 = 100; // Updates per second
@@ -70,6 +70,7 @@ pub struct BrainState {
     scan_p: Option<Point2<f32>>, // For diagnostics
     wall_avoid_p: Option<Point2<f32>>, // For diagnostics
     attack_step_count: u32,
+    wall_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>,
     shortest_wall_head_on_distance: f32,
     wall_avoidance_vector: Vector2<f32>,
     shortest_wall_distance: f32,
@@ -91,6 +92,7 @@ impl BrainState {
             scan_p: None,
             wall_avoid_p: None,
             attack_step_count: 0,
+            wall_lines: ArrayVec::new(),
             shortest_wall_head_on_distance: f32::MAX,
             wall_avoidance_vector: Vector2::new(0.0, 0.0),
             shortest_wall_distance: f32::MAX,
@@ -150,14 +152,14 @@ impl BrainState {
             self.map.paint_proximity_reading(self.pos, reading.0 + self.rot, reading.1, reading.2);
         }
 
-        let mut lines = self.map.hough_transform();
-        /*for line in &lines {
+        self.wall_lines = self.map.hough_transform();
+        /*for line in &self.wall_lines {
             println!("HoughLine: angle={:?} distance={:?} votes={:?}",
                     line.angle, line.distance, line.votes);
         }*/
 
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
-                self.wall_avoid_p, &lines);
+                self.wall_avoid_p, &self.wall_lines);
 
         // TODO: Avoid walls found by hough_transform
 
@@ -166,7 +168,7 @@ impl BrainState {
         //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
 
         self.shortest_wall_head_on_distance = f32::MAX;
-        for line in &lines {
+        for line in &self.wall_lines {
             if let Some(intersection_point_tiles) = calculate_intersection(
                     robot_tile_position, robot_direction_vector, &line) {
                 let distance_tiles = (robot_tile_position - intersection_point_tiles).magnitude();
@@ -187,7 +189,7 @@ impl BrainState {
         const IMPORTANCE_CONSTANT: f32 = 15.0;
         self.wall_avoidance_vector = Vector2::new(0.0, 0.0);
         self.shortest_wall_distance = f32::MAX;
-        for line in &lines {
+        for line in &self.wall_lines {
             let vector_from_wall_to_robot = line.vector_to_point(robot_tile_position);
             let distance_from_line_tiles = vector_from_wall_to_robot.magnitude();
             let importance = 1.0 / (distance_from_line_tiles +
@@ -289,7 +291,7 @@ impl BrainState {
             0.1, 0.2, 0.2, 0.2, 0.2, 0.1,
         ];
         let result_maybe = self.map.find_binary_pattern(
-                &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights));
+                &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights), accept_any_xy);
         if let Some(result) = result_maybe {
             let score = result.2;
             //println!("score: {:?}", score);
@@ -313,36 +315,45 @@ impl BrainState {
         let max_linear_speed = 50.0;
         let max_rotation_speed = PI * 2.0;
         // Find a good spot on the map to investigate
-        // TODO: Somehow fill in the behinds of walls on the map in such a way
-        //       that the robot doesn't see them as places where it can go, or
-        //       in some other way make it so that the robot doesn't try to
-        //       drive through walls
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
-        let v = -40.0;
         let pattern = [
-            v, v, v, v, v, v,
-            v, v, v, v, v, v,
-            v, v, v, v, v, v,
-            v, v, v, v, v, v,
-            v, v, v, v, v, v,
-            v, v, v, v, v, v,
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
+            false, false, false, false, false, false,
         ];
-        let result_maybe = self.map.find_pattern(&pattern, pattern_w, pattern_h, 5.0, 100.0);
+        // Filter out positions that are behind walls
+        let robot_tile = self.pos.coords * (1.0 / self.map.tile_wh);
+        let wall_filter = |x: u32, y: u32| -> bool {
+            // Take into account pattern size and use the middle as the target
+            // point
+            let point_tile = Vector2::new(x as f32 + pattern_w as f32 / 2.0,
+                    y as f32 + pattern_h as f32 / 2.0);
+            for line in &self.wall_lines {
+                // If the distance from the robot to the wall is smaller than
+                // the distance from the robot to the point, then the point is
+                // beyond the wall
+                let d_robot_to_wall = line.distance(robot_tile);
+                let d_robot_to_point = (robot_tile - point_tile).magnitude();
+                if d_robot_to_wall < d_robot_to_point {
+                    return false;
+                }
+            }
+            true
+        };
+        // NOTE: A bit more priority (negative score) is put on forgotten area
+        // in order to generate exploration targets
+        let result_maybe = self.map.find_binary_pattern(
+                &pattern, pattern_w, pattern_h, 50.0, -0.1, None, wall_filter);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
                 (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
                 (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
             );
-
-            // TODO: Create a wall avoidance vector and shortest_wall_distance
-            // values for this target_p and adjust it further from the walls if
-            // needed
-            // TODO: Especially check if target_p is behind a wall. If it is,
-            // don't go there.
-            // TODO: What else to pick instead?
-
             //println!("target_p: {:?}", target_p);
             self.scan_p = Some(target_p);
             // Drive towards that spot
