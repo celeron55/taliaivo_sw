@@ -416,6 +416,37 @@ impl BrainState {
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
+        // Avoid hits also with stupid logic. The wall detection is not always
+        // fast enough as it requires a certain length of wall to be seen.
+        if self.proximity_sensor_readings.len() >= 6 {
+            let d0 = self.proximity_sensor_readings[0].1;
+            let d1 = self.proximity_sensor_readings[1].1;
+            let d2 = self.proximity_sensor_readings[2].1;
+            let d3 = self.proximity_sensor_readings[3].1;
+            let d4 = self.proximity_sensor_readings[4].1;
+            let d5 = self.proximity_sensor_readings[5].1;
+            // Assume the first 3 sensors are pointing somewhat forward and if they
+            // all are showing short distance, don't try to push further
+            let mut wanted_linear_speed = 0.0;
+            let mut wanted_rotation_speed = PI * 0.0;
+            let d = 15.0;
+            if d0 < d {
+                println!("Stupid hit avoidance logic: Reverse");
+                wanted_linear_speed = -50.0;
+            }
+            if d1 < d {
+                println!("Stupid hit avoidance logic: Turn right");
+                wanted_rotation_speed = PI * 2.0;
+            }
+            if d2 < d {
+                println!("Stupid hit avoidance logic: Turn left");
+                wanted_rotation_speed = PI * -2.0;
+            }
+            if wanted_linear_speed != 0.0 || wanted_rotation_speed != 0.0 {
+                return (wanted_linear_speed, wanted_rotation_speed);
+            }
+        }
+
         //println!("scan");
         self.attack_step_count = 0;
         return self.create_scanning_motion();

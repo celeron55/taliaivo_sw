@@ -248,7 +248,7 @@ const HOUGH_THRESHOLD: usize = 11;
 const KEEP_NUM_TOP_LINES: usize = 7;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const EDGE_MIN_POS: f32 = 50.0;
-const EDGE_MAX_NEG: f32 = -30.0;
+const EDGE_MAX_NEG: f32 = -15.0;
 
 const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
 const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
