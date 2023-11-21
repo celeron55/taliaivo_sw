@@ -245,7 +245,7 @@ const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
 const HOUGH_THRESHOLD: usize = 11;
-const KEEP_NUM_TOP_LINES: usize = 8;
+const KEEP_NUM_TOP_LINES: usize = 7;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const EDGE_MIN_POS: f32 = 50.0;
 const EDGE_MAX_NEG: f32 = -30.0;

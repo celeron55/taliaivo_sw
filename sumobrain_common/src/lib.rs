@@ -81,6 +81,45 @@ fn average_enemy_position_over_recent_ticks(
     }
 }
 
+fn average_enemy_position_and_velocity_over_recent_ticks(
+    buffer: &ConstGenericRingBuffer<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
+    current_tick: u64,
+    max_age: u64,
+) -> Option<(Point2<f32>, Vector2<f32>)> {
+    let min_tick = current_tick.saturating_sub(max_age);
+    let mut sum_position = Point2::new(0.0, 0.0);
+    let mut initial_position = None;
+    let mut final_position = None;
+    let mut count = 0;
+
+    for &(tick, position) in buffer.iter() {
+        if tick >= min_tick {
+            sum_position.coords += position.coords;
+            count += 1;
+            final_position = Some((tick, position));
+            initial_position = initial_position.or(Some((tick, position)));
+        }
+    }
+
+    if count > 0 && initial_position.is_some() && final_position.is_some() {
+        let (initial_tick, initial_pos) = initial_position.unwrap();
+        let (final_tick, final_pos) = final_position.unwrap();
+        let time_diff = final_tick as f32 - initial_tick as f32;
+        if time_diff > 0.0 {
+            let average_position = Point2::new(sum_position.x / count as f32, sum_position.y / count as f32);
+            let velocity = Vector2::new(
+                (final_pos.x - initial_pos.x) / time_diff,
+                (final_pos.y - initial_pos.y) / time_diff,
+            );
+            Some((average_position, velocity))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
+}
+
 pub struct BrainState {
     seed: u32,
     counter: u64,
@@ -349,16 +388,12 @@ impl BrainState {
 
         // See if the enemy history ringbuffer looks such that we can determine
         // where the enemy is. If so, attack the enemy.
-        let r = average_enemy_position_over_recent_ticks(
-                &self.enemy_history, self.counter, (UPS as f32 * 0.05) as u64);
-        if let Some(target_p) = r {
+        let r = average_enemy_position_and_velocity_over_recent_ticks(
+                &self.enemy_history, self.counter, (UPS as f32 * 0.10) as u64);
+        if let Some((p, v)) = r {
+            // Try to predict the enemy position a bit
+            let target_p = p + v * (UPS as f32 * 0.10);
             return self.create_attack_motion(target_p);
-        } else {
-            let r = average_enemy_position_over_recent_ticks(
-                    &self.enemy_history, self.counter, (UPS as f32 * 0.30) as u64);
-            if let Some(target_p) = r {
-                return self.create_attack_motion(target_p);
-            }
         }
 
         // Avoid walls as a higher priority than scanning
@@ -376,7 +411,7 @@ impl BrainState {
                 wanted_linear_speed = -max_linear_speed * 0.2;
             } else if self.shortest_wall_head_on_distance < 40.0 {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
-                wanted_linear_speed *= 0.2;
+                wanted_linear_speed *= 0.05;
             }
             return (wanted_linear_speed, wanted_rotation_speed);
         }
