@@ -413,6 +413,8 @@ impl BrainState {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
                 wanted_linear_speed *= 0.05;
             }
+            // Apply motor speed modulation to get scanning data
+            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
