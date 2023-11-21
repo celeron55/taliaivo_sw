@@ -255,9 +255,7 @@ impl BrainState {
         //   position is not obvious right now, slightly older information can
         //   be used. Ideally the enemy velocity should be taken into account.
 
-        let score_requirement = 4.0;
-        //let score_requirement = 3.4;
-        //let score_requirement = 3.0;
+        let score_requirement = 3.5;
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -319,17 +317,17 @@ impl BrainState {
         }
 
         // Avoid walls
-        if self.shortest_wall_distance < 15.0 ||
-                self.shortest_wall_head_on_distance < 30.0 {
+        if self.shortest_wall_distance < 10.0 ||
+                self.shortest_wall_head_on_distance < 20.0 {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
-            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 30.0;
+            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 20.0;
             self.wall_avoid_p = Some(target_p);
             let max_linear_speed = 50.0;
             let max_rotation_speed = PI * 3.0;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed);
-            if self.shortest_wall_head_on_distance < 40.0 {
+            if self.shortest_wall_head_on_distance < 20.0 {
                 //wanted_linear_speed = -max_linear_speed * 0.2;
                 wanted_linear_speed *= 0.2;
             }
