@@ -14,6 +14,9 @@ pub use map::*;
 pub const UPS: u32 = 100; // Updates per second
 const ENEMY_HISTORY_LENGTH: usize = 50;
 const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
+const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+const MAX_LINEAR_SPEED: f32 = 100.0;
+const MAX_ROTATION_SPEED: f32 = PI * 4.0;
 
 pub trait RobotInterface {
     // Capabilities and dimensions
@@ -233,30 +236,33 @@ impl BrainState {
         for reading in &self.proximity_sensor_readings {
             let maybe_newly_occupied = self.map.paint_proximity_reading(
                     self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
-            if let Some(newly_occupied_p) = maybe_newly_occupied {
-                //println!("Newly occupied: {:?}", newly_occupied_p);
-                // Filter out point if it is close to a wall
-                let newly_occupied_p_f = Point2::new(
-                        newly_occupied_p.x as f32,
-                        newly_occupied_p.y as f32);
-                if !tile_is_close_to_wall(newly_occupied_p_f, &self.wall_lines, 3.0) {
-                    // Detect if the newly occupied point behind us regarding to our
-                    // movement direction. That would mean it is likely the newly
-                    // occupied point was not caused by our movement and instead it
-                    // is the enemy trying to catch up on us. If it is such a point,
-                    // add it to enemy_history.
-                    //let robot_rotation_vector = Vector2::new(self.rot.cos(), self.rot.sin());
-                    let robot_direction_vector = self.vel;
-                    let newly_occupied_p_world = Point2::new(
-                            newly_occupied_p.x as f32 * self.map.tile_wh,
-                            newly_occupied_p.y as f32 * self.map.tile_wh);
-                    let point_direction_vector = newly_occupied_p_world - self.pos;
-                    if robot_direction_vector.dot(&point_direction_vector) < 0.0 {
-                        self.enemy_history.push((self.counter, newly_occupied_p_world));
+            if AGGRESSIVENESS >= 0.2 {
+                if let Some(newly_occupied_p) = maybe_newly_occupied {
+                    //println!("Newly occupied: {:?}", newly_occupied_p);
+                    // Filter out point if it is close to a wall
+                    let newly_occupied_p_f = Point2::new(
+                            newly_occupied_p.x as f32,
+                            newly_occupied_p.y as f32);
+                    if !tile_is_close_to_wall(newly_occupied_p_f, &self.wall_lines, 3.0) {
+                        // Detect if the newly occupied point behind us regarding to our
+                        // movement direction. That would mean it is likely the newly
+                        // occupied point was not caused by our movement and instead it
+                        // is the enemy trying to catch up on us. If it is such a point,
+                        // add it to enemy_history.
+                        //let robot_rotation_vector = Vector2::new(self.rot.cos(), self.rot.sin());
+                        let robot_direction_vector = self.vel;
+                        let newly_occupied_p_world = Point2::new(
+                                newly_occupied_p.x as f32 * self.map.tile_wh,
+                                newly_occupied_p.y as f32 * self.map.tile_wh);
+                        let point_direction_vector = newly_occupied_p_world - self.pos;
+                        if robot_direction_vector.dot(&point_direction_vector) < 0.0 ||
+                                AGGRESSIVENESS >= 0.6 {
+                            self.enemy_history.push((self.counter, newly_occupied_p_world));
+                        }
+                        //println!("Isn't close to wall");
+                    } else {
+                        //println!("Is close to wall");
                     }
-                    //println!("Isn't close to wall");
-                } else {
-                    //println!("Is close to wall");
                 }
             }
         }
@@ -397,18 +403,10 @@ impl BrainState {
         self.scan_p = None;
         self.wall_avoid_p = None;
 
-        // TODO: Improve enemy finding
-        // - The enemy can take many shapes within 2x2 tiles
-        // - The enemy can be against a wall
-        // - The age of information about the enemy can vary
-        // - The enemy should be tracked throgh multiple updates so that if its
-        //   position is not obvious right now, slightly older information can
-        //   be used. Ideally the enemy velocity should be taken into account.
-
         // See if the enemy can be reasonably found on the map and if so, add it
         // to the enemy history ringbuffer
 
-        let score_requirement = 3.2;
+        let score_requirement = 3.2 - AGGRESSIVENESS;
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -439,7 +437,7 @@ impl BrainState {
                 // set threshold, we don't want to investigate the point as it
                 // would be unsafe
                 let d_point_to_wall = line.distance(point_tile);
-                if d_point_to_wall < 5.0 {
+                if d_point_to_wall < 5.0 - AGGRESSIVENESS * 2.0 {
                     return false;
                 }
                 // If the distance from the robot to the wall is smaller than
@@ -488,7 +486,7 @@ impl BrainState {
             let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
             self.wall_avoid_p = Some(target_p);
             let max_linear_speed = self.get_wall_safe_linear_speed();
-            let max_rotation_speed = PI * 3.0;
+            let max_rotation_speed = MAX_ROTATION_SPEED * 0.75;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed, true);
@@ -540,7 +538,7 @@ impl BrainState {
 
     pub fn create_scanning_motion(&mut self) -> (f32, f32) {
         let max_linear_speed = self.get_wall_safe_linear_speed();
-        let max_rotation_speed = PI * 2.0;
+        let max_rotation_speed = MAX_ROTATION_SPEED * 0.5;
         // Find a good spot on the map to investigate
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
@@ -617,11 +615,8 @@ impl BrainState {
     pub fn create_attack_motion(&mut self, target_p: Point2<f32>) -> (f32, f32) {
         self.attack_p = Some(target_p);
         // Drive towards target
-        // TODO: Make it so that a higher speed like this is controllable
-        /*let max_linear_speed = 200.0;
-        let max_rotation_speed = PI * 4.0;*/
-        let max_linear_speed = 100.0;
-        let max_rotation_speed = PI * 4.0;
+        let max_linear_speed = MAX_LINEAR_SPEED;
+        let max_rotation_speed = MAX_ROTATION_SPEED;
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
                         target_p, max_linear_speed, max_rotation_speed, true);
