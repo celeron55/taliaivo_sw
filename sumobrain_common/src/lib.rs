@@ -362,6 +362,8 @@ impl BrainState {
         (wanted_linear_speed, wanted_rotation_speed) = self.create_motion();
 
         // Limit wanted speeds if out of control situation is detected
+        // TODO: Try to do traction control, i.e. keep wheel speeds not too far
+        //       from the ground speeds of each wheel
         if out_of_control_turn {
             wanted_linear_speed *= 0.3;
             wanted_rotation_speed *= 0.3;
@@ -376,6 +378,14 @@ impl BrainState {
                 wanted_wheel_speed_left, max_accel);
         self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
                 wanted_wheel_speed_right, max_accel);
+
+        // Experimental. Appeaars to help stabilize bad oversteer slides in a
+        // way that generally ends up the robot pointing towars the opponent
+        // which is good.
+        if out_of_control_turn {
+            self.applied_wheel_speed_left = 0.0;
+            self.applied_wheel_speed_right = 0.0;
+        }
 
         // Rotation has to be prioritized, thus if the wanted wheel speed
         // difference wasn't applied, force it, ignoring acceleration
