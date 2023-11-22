@@ -21,6 +21,11 @@ const DT: f32 = 1.0 / UPS as f32;
 const SIMULATE_LIDAR: bool = false;
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
 const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
+const GYRO_SENSOR_NOISE_MIN: f32 = PI as f32 * -0.1;
+const GYRO_SENSOR_NOISE_MAX: f32 = PI as f32 *  0.1;
+const GYRO_SENSOR_ABSOLUTE_ERROR: f32 = PI as f32 * 0.025;
+const GYRO_SENSOR_ABSOLUTE_ERROR_WITH_POLARITY: f32 = PI as f32 * 0.05;
+const GYRO_SENSOR_ABSOLUTE_ERROR_POLARITY_INTERVAL: u64 = UPS * 4;
 
 const GROUP_ARENA:         u32 = 0b00001000;
 const GROUP_ROBOT0_BODY:   u32 = 0b00000001;
@@ -326,7 +331,18 @@ impl Robot {
 
         // Gyroscope
         if let Some(body) = rigid_body_set.get(self.body_handle) {
-            self.gyro_z = body.angvel();
+            let gyro_z_precise_value = body.angvel();
+            let noise = Uniform::from(
+                    GYRO_SENSOR_NOISE_MIN..GYRO_SENSOR_NOISE_MAX)
+                    .sample(&mut rand::thread_rng());
+            let add_error = GYRO_SENSOR_ABSOLUTE_ERROR + if
+                    (tick_count % (GYRO_SENSOR_ABSOLUTE_ERROR_POLARITY_INTERVAL * 2))
+                        < GYRO_SENSOR_ABSOLUTE_ERROR_POLARITY_INTERVAL {
+                GYRO_SENSOR_ABSOLUTE_ERROR_WITH_POLARITY
+            } else {
+                -GYRO_SENSOR_ABSOLUTE_ERROR_WITH_POLARITY
+            };
+            self.gyro_z = gyro_z_precise_value + noise + add_error;
         }
 
         // Proximity sensors
