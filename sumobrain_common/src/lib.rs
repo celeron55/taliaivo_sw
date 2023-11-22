@@ -231,8 +231,9 @@ impl BrainState {
         // forgetting to clear out now invalid data.
         /*println!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
                 self.gyro_based_rotation_speed_filtered, self.wheel_based_rotation_speed_filtered);*/
-        if (self.gyro_based_rotation_speed_filtered - self.wheel_based_rotation_speed_filtered).abs()
-                > PI * 1.0 {
+        let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
+                self.wheel_based_rotation_speed_filtered).abs() > PI * 1.5;
+        if out_of_control_turn {
             self.map.global_forget(0.9);
         }
 
@@ -359,6 +360,12 @@ impl BrainState {
         let mut wanted_rotation_speed = 0.0;
 
         (wanted_linear_speed, wanted_rotation_speed) = self.create_motion();
+
+        // Limit wanted speeds if out of control situation is detected
+        if out_of_control_turn {
+            wanted_linear_speed *= 0.3;
+            wanted_rotation_speed *= 0.3;
+        }
 
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
         let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
