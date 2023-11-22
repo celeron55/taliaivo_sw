@@ -349,7 +349,9 @@ impl BrainState {
 
         // Rotation has to be prioritized, thus if the wanted wheel speed
         // difference wasn't applied, force it, ignoring acceleration
-        // TODO: Rethink this
+        // TODO: Instead of doing this, just deprioritize acceleration of one
+        // wheel so that some of the requested speed difference is visible
+        // during acceleration
         let avg_applied_speed = (self.applied_wheel_speed_left + self.applied_wheel_speed_right) / 2.0;
         let wanted_difference = wanted_wheel_speed_left - wanted_wheel_speed_right;
         self.applied_wheel_speed_left = avg_applied_speed + wanted_difference / 2.0;
@@ -630,9 +632,13 @@ impl BrainState {
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
                         target_p, max_linear_speed, max_rotation_speed, true);
+        // If not much rotation is needed, use extra speed
+        if wanted_rotation_speed.abs() < PI * 2.0 {
+            wanted_linear_speed *= 1.5 + AGGRESSIVENESS * 0.5;
+        }
         // Apply some motor speed modulation to get scanning data to help stay
         // on target
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 2.0;
         // Revert linear speed at an interval to allow the weapon to spin up
         if self.attack_step_count > UPS * 2 &&
                 ((self.attack_step_count as u32) % (UPS * 4)) < (UPS as f32 * 0.3) as u32 {
