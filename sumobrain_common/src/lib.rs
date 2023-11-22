@@ -5,10 +5,10 @@ extern crate ringbuffer;
 pub mod map;
 
 use arrayvec::ArrayVec;
-
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
+use libc_print::std_name::println;
 pub use map::*;
 
 pub const UPS: u32 = 100; // Updates per second
@@ -160,6 +160,8 @@ pub struct BrainState {
     wall_avoidance_vector: Vector2<f32>,
     shortest_wall_distance: f32,
     enemy_history: ConstGenericRingBuffer::<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
+    gyro_based_rotation_speed_filtered: f32,
+    wheel_based_rotation_speed_filtered: f32,
 }
 
 impl BrainState {
@@ -183,6 +185,8 @@ impl BrainState {
             wall_avoidance_vector: Vector2::new(0.0, 0.0),
             shortest_wall_distance: f32::MAX,
             enemy_history: ConstGenericRingBuffer::new(),
+            gyro_based_rotation_speed_filtered: 0.0,
+            wheel_based_rotation_speed_filtered: 0.0,
         }
     }
 
@@ -202,6 +206,10 @@ impl BrainState {
             self.map.translate(dx_tiles, dy_tiles);
         }
 
+        // 0.998 works for keeping up to date with a 125x125cm arena
+        self.map.global_forget(0.998);
+
+        let track = robot.get_track_width();
         let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
         let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
         //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
@@ -209,13 +217,36 @@ impl BrainState {
         let (_gyro_x, _gyro_y, gyro_z) = robot.get_gyroscope_reading();
         //println!("gyro_z: {:?}", gyro_z);
 
-        // TODO: Make sure this is scaled appropriately
-        self.rot += gyro_z / UPS as f32;
+        // Calculate current rotation speed based on the gyroscope, and based on
+        // wheel speeds.
+        let gyro_based_rotation_speed_unfiltered = gyro_z;
+        self.gyro_based_rotation_speed_filtered = self.gyro_based_rotation_speed_filtered * 0.9 +
+                gyro_based_rotation_speed_unfiltered * 0.1;
+        let wheel_based_rotation_speed_unfiltered =
+                (self.applied_wheel_speed_right - self.applied_wheel_speed_left) / track;
+        self.wheel_based_rotation_speed_filtered = self.wheel_based_rotation_speed_filtered * 0.9 +
+                wheel_based_rotation_speed_unfiltered * 0.1;
+
+        // If gyro and wheel based rotation speeds don't match, accelerate map
+        // forgetting to clear out now invalid data.
+        /*println!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
+                self.gyro_based_rotation_speed_filtered, self.wheel_based_rotation_speed_filtered);*/
+        if (self.gyro_based_rotation_speed_filtered - self.wheel_based_rotation_speed_filtered).abs()
+                > PI * 1.0 {
+            self.map.global_forget(0.9);
+        }
+
+        // Maintain rotation information based on the gyro (without filtering,
+        // for fast reaction time)
+        // TODO: The value here should be filtered roughly by the same amount as
+        //       the proximity sensors are
+        self.rot += gyro_based_rotation_speed_unfiltered / UPS as f32;
 
         // TODO: If gyro_z doesn't match rotation caused by wheel speeds, assume
-        // a wheel is not touching the ground and act differently
-
-        // TODO: Maintain self.rot via motor speeds
+        //       a wheel is not touching the ground and act differently?
+        // TODO: Maintain self.rot via motor speeds at least if the gyro is not
+        //       working?
+        // TODO: Detect if the gyro is not working?
 
         // TODO: Maintain self.vel via accelerometer and self.rot
 
@@ -231,13 +262,6 @@ impl BrainState {
         self.proximity_sensor_readings = robot.get_proximity_sensors();
 
         //println!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
-
-        // 0.998 works for keeping up to date with a 125x125cm arena
-        self.map.global_forget(0.998);
-
-        if gyro_z.abs() > PI * 5.0 {
-            self.map.global_forget(0.9);
-        }
 
         for reading in &self.proximity_sensor_readings {
             let maybe_newly_occupied = self.map.paint_proximity_reading(
@@ -336,7 +360,6 @@ impl BrainState {
 
         (wanted_linear_speed, wanted_rotation_speed) = self.create_motion();
 
-        let track = robot.get_track_width();
         let wanted_wheel_speed_left = wanted_linear_speed - wanted_rotation_speed * (track / 2.0);
         let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
 
