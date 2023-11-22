@@ -231,6 +231,7 @@ impl BrainState {
         // forgetting to clear out now invalid data.
         /*println!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
                 self.gyro_based_rotation_speed_filtered, self.wheel_based_rotation_speed_filtered);*/
+        // TODO: Do something similar based on the accelerometer
         let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
                 self.wheel_based_rotation_speed_filtered).abs() > PI * 1.5;
         if out_of_control_turn {
