@@ -328,7 +328,11 @@ impl Robot {
 
         // Proximity sensors
 
+        let sensor_mount_radius: f32 = 3.5;
         let max_detection_distance: f32 = 40.0;
+        // Below a certain range sensor result is essentially random so it will
+        // be clamped
+        let min_detection_distance: f32 = 5.0;
 
         let position_sensor_angles = if SIMULATE_LIDAR {
             // Simulate a lidar turret (have to have the same number of entries)
@@ -358,20 +362,28 @@ impl Robot {
                 let additional_rotation = UnitComplex::new(angle_rad as f32);
                 let rotation = additional_rotation * robot_orientation;
                 let shape_vel: Vector2<f32> = rotation * Vector2::new(0.0, 1.0);
-                let max_toi = max_detection_distance;
+                let max_toi = sensor_mount_radius + max_detection_distance;
                 let stop_at_penetration = true;
                 let filter = QueryFilter::new().groups(self.interaction_groups);
 
                 if let Some((_handle, hit)) = query_pipeline.cast_shape(
-                    &rigid_body_set, &collider_set, &shape_pos, &shape_vel, &shape, max_toi, stop_at_penetration, filter
+                    &rigid_body_set, &collider_set, &shape_pos, &shape_vel, &shape, max_toi,
+                    stop_at_penetration, filter
                 ) {
                     // The first collider hit has the handle `handle`. The `hit` is a
                     // structure containing details about the hit configuration.
                     //println!("Hit the collider {:?} with the configuration: {:?}", handle, hit);
-
-                    self.proximity_sensor_readings.push((angle_rad as f32, hit.toi, true));
+                    let reported_detection_distance = if hit.toi >=
+                            sensor_mount_radius + min_detection_distance {
+                        hit.toi
+                    } else {
+                        sensor_mount_radius + min_detection_distance
+                    };
+                    self.proximity_sensor_readings.push((angle_rad as f32,
+                            reported_detection_distance, true));
                 } else {
-                    self.proximity_sensor_readings.push((angle_rad as f32, max_detection_distance, false));
+                    self.proximity_sensor_readings.push((angle_rad as f32,
+                            sensor_mount_radius + max_detection_distance, false));
                 }
             }
 		}
