@@ -11,4 +11,5 @@ rapier2d = "0.17.2"
 piston_window = "0.131.0"
 piston = "0.55.0"
 arrayvec = "0.7.4"
+rand = "0.8.5"
 

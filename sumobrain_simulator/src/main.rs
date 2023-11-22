@@ -10,6 +10,7 @@ use std::f64::consts::PI;
 use sumobrain_common::{RobotInterface, BrainState, Map};
 use arrayvec::ArrayVec;
 use sumobrain_common::map::HoughLine;
+use rand::distributions::{Distribution, Uniform};
 
 const FPS: u64 = 120;
 const UPS: u64 = sumobrain_common::UPS as u64;
@@ -18,6 +19,8 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
 const SIMULATE_LIDAR: bool = false;
+const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
+const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
 
 const GROUP_ARENA:         u32 = 0b00001000;
 const GROUP_ROBOT0_BODY:   u32 = 0b00000001;
@@ -379,8 +382,11 @@ impl Robot {
                     } else {
                         sensor_mount_radius + min_detection_distance
                     };
+                    let noise = Uniform::from(
+                            PROXIMITY_SENSOR_NOISE_MIN_CM..PROXIMITY_SENSOR_NOISE_MAX_CM)
+                            .sample(&mut rand::thread_rng());
                     self.proximity_sensor_readings.push((angle_rad as f32,
-                            reported_detection_distance, true));
+                            reported_detection_distance + noise, true));
                 } else {
                     self.proximity_sensor_readings.push((angle_rad as f32,
                             sensor_mount_radius + max_detection_distance, false));
