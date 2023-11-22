@@ -678,6 +678,10 @@ fn main() {
 
     let mut counter: u64 = 0;
 
+    let mut paused = false;
+    let mut slow_motion = false;
+    let mut slow_motion_counter: u64 = 0;
+
     while let Some(e) = window.next() {
         if e.render_args().is_some() {
             window.draw_2d(&e, |c, g, _| {
@@ -713,47 +717,50 @@ fn main() {
             });
         }
 
-        if e.update_args().is_some() {
-            brain.update(&mut robots[0]);
+        if e.update_args().is_some() && !paused {
+            if !slow_motion || slow_motion_counter % 5 == 0 {
+                brain.update(&mut robots[0]);
 
-            match robot2_controller {
-                RobotController::Brain => {
-                    brain2.update(&mut robots[1]);
-                },
-                RobotController::Keyboard => {
-                    keyboard_controller.control(&mut robots[1]);
-                },
-            }
-
-            for robot in &mut robots {
-                if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
-                    body.reset_forces(true);
-                    body.reset_torques(true);
+                match robot2_controller {
+                    RobotController::Brain => {
+                        brain2.update(&mut robots[1]);
+                    },
+                    RobotController::Keyboard => {
+                        keyboard_controller.control(&mut robots[1]);
+                    },
                 }
+
+                for robot in &mut robots {
+                    if let Some(body) = rigid_body_set.get_mut(robot.body_handle) {
+                        body.reset_forces(true);
+                        body.reset_torques(true);
+                    }
+                }
+
+                for robot in &mut robots {
+                    robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
+                    robot.update_sensors(&mut query_pipeline, &collider_set, &rigid_body_set, counter);
+                }
+
+                physics_pipeline.step(
+                    &gravity,
+                    &integration_parameters,
+                    &mut island_manager,
+                    &mut broad_phase,
+                    &mut narrow_phase,
+                    &mut rigid_body_set,
+                    &mut collider_set,
+                    &mut impulse_joint_set,
+                    &mut multibody_joint_set,
+                    &mut ccd_solver,
+                    Some(&mut query_pipeline),
+                    &physics_hooks,
+                    &event_handler,
+                );
+
+                counter += 1;
             }
-
-            for robot in &mut robots {
-                robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
-                robot.update_sensors(&mut query_pipeline, &collider_set, &rigid_body_set, counter);
-            }
-
-            physics_pipeline.step(
-                &gravity,
-                &integration_parameters,
-                &mut island_manager,
-                &mut broad_phase,
-                &mut narrow_phase,
-                &mut rigid_body_set,
-                &mut collider_set,
-                &mut impulse_joint_set,
-                &mut multibody_joint_set,
-                &mut ccd_solver,
-                Some(&mut query_pipeline),
-                &physics_hooks,
-                &event_handler,
-            );
-
-            counter += 1;
+            slow_motion_counter += 1;
         }
 
         if let Some(Button::Keyboard(key)) = e.press_args() {
@@ -767,6 +774,12 @@ fn main() {
                             robot2_controller = RobotController::Brain;
                         },
                     }
+                },
+                Key::Space => {
+                    paused = !paused;
+                },
+                Key::M => {
+                    slow_motion = !slow_motion;
                 },
                 _ => {}
             }
