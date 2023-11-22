@@ -13,8 +13,14 @@ pub use map::*;
 
 pub const UPS: u32 = 100; // Updates per second
 const ENEMY_HISTORY_LENGTH: usize = 50;
+
+// Arena configuration
 const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
-const AGGRESSIVENESS: f32 = -1.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+
+// General behavior configuration
+// Aggressiveness is tuned such that at and below 0.0 false positive attacks
+// don't occur on an empty arena.
+const AGGRESSIVENESS: f32 = 0.1; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 const MAX_LINEAR_SPEED: f32 = 100.0;
 const MAX_ROTATION_SPEED: f32 = PI * 4.0;
 
@@ -236,7 +242,7 @@ impl BrainState {
         for reading in &self.proximity_sensor_readings {
             let maybe_newly_occupied = self.map.paint_proximity_reading(
                     self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
-            if AGGRESSIVENESS >= 0.2 {
+            if AGGRESSIVENESS > 0.01 {
                 if let Some(newly_occupied_p) = maybe_newly_occupied {
                     //println!("Newly occupied: {:?}", newly_occupied_p);
                     // Filter out point if it is close to a wall
@@ -256,7 +262,7 @@ impl BrainState {
                                 newly_occupied_p.y as f32 * self.map.tile_wh);
                         let point_direction_vector = newly_occupied_p_world - self.pos;
                         if robot_direction_vector.dot(&point_direction_vector) < 0.0 ||
-                                AGGRESSIVENESS >= 0.6 {
+                                AGGRESSIVENESS >= 0.5 {
                             self.enemy_history.push((self.counter, newly_occupied_p_world));
                         }
                         //println!("Isn't close to wall");
@@ -407,7 +413,10 @@ impl BrainState {
         // to the enemy history ringbuffer
 
         // NOTE: Higher score is easier match
-        let score_requirement = 3.2 + AGGRESSIVENESS;
+        // NOTE: With 4 required true tiles with 1.0 weights, every empty area
+        //       gets scored to 4.0. It does not make sense to attack an empty
+        //       area.
+        let score_requirement = (3.2 + AGGRESSIVENESS).clamp(0.0, 3.99);
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
