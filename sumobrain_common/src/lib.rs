@@ -20,7 +20,7 @@ const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
 // don't occur on an empty arena.
-const AGGRESSIVENESS: f32 = 0.1; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 const MAX_LINEAR_SPEED: f32 = 100.0;
 const MAX_ROTATION_SPEED: f32 = PI * 4.0;
 
