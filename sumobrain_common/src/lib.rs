@@ -468,7 +468,7 @@ impl BrainState {
                 &self.enemy_history, self.counter, (UPS as f32 * 0.10) as u64);
         if let Some((p, v)) = r {
             // Try to predict the enemy position a bit
-            let target_p = p + v * (UPS as f32 * 0.10);
+            let target_p = p + v * (UPS as f32 * 0.05);
             return self.create_attack_motion(target_p);
         }
 
