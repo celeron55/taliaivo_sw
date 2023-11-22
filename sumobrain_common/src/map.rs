@@ -309,6 +309,22 @@ impl HoughLine {
         // The vector from the point to the closest point on the line
         point - closest_point_on_line
     }
+    pub fn move_towards_point(&self, target_point: Vector2<f32>, move_distance: f32) -> HoughLine {
+        let angle_rad = self.angle.to_radians();
+        let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
+
+        // Calculate the current perpendicular distance from the target point to the line
+        let current_distance = (target_point.dot(&line_normal) - self.distance).abs();
+
+        // Calculate the new distance for the line after moving
+        let new_distance = if self.distance < target_point.dot(&line_normal) {
+            self.distance + move_distance
+        } else {
+            self.distance - move_distance
+        };
+
+        HoughLine::new(self.angle, new_distance, self.votes)
+    }
 }
 
 pub fn angle_difference(angle1: f32, angle2: f32) -> f32 {

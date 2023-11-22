@@ -11,6 +11,10 @@ use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 pub use map::*;
 
+pub const UPS: u32 = 100; // Updates per second
+const ENEMY_HISTORY_LENGTH: usize = 50;
+const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
+
 pub trait RobotInterface {
     // Capabilities and dimensions
     fn get_track_width(&self) -> f32;
@@ -41,10 +45,6 @@ pub trait RobotInterface {
             wall_avoid_p: Option<Point2<f32>>,
             wall_lines: &[HoughLine]);
 }
-
-pub const UPS: u32 = 100; // Updates per second
-
-const ENEMY_HISTORY_LENGTH: usize = 50;
 
 fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
     if target_value > previous_value {
@@ -193,6 +193,10 @@ impl BrainState {
             self.map.translate(dx_tiles, dy_tiles);
         }
 
+        let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
+        let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
+        //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
+
         let (_gyro_x, _gyro_y, gyro_z) = robot.get_gyroscope_reading();
         //println!("gyro_z: {:?}", gyro_z);
 
@@ -263,14 +267,19 @@ impl BrainState {
                     line.angle, line.distance, line.votes);
         }*/
 
+        // Guess opposing wall positions and add them also
+        let arena_dimension_tiles = ARENA_DIMENSION / self.map.tile_wh;
+        let mut new_wall_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
+        for line in &self.wall_lines {
+            let line2 = line.move_towards_point(robot_tile_position, arena_dimension_tiles);
+            new_wall_lines.push(line2);
+        }
+        self.wall_lines.extend(new_wall_lines);
+
         robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
                 self.wall_avoid_p, &self.wall_lines);
 
         // Process wall lines
-
-        let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
-        let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
-        //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
 
         self.shortest_wall_head_on_distance = f32::MAX;
         for line in &self.wall_lines {
