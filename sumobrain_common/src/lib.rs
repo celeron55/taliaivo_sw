@@ -14,7 +14,7 @@ pub use map::*;
 pub const UPS: u32 = 100; // Updates per second
 const ENEMY_HISTORY_LENGTH: usize = 50;
 const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
-const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+const AGGRESSIVENESS: f32 = -1.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 const MAX_LINEAR_SPEED: f32 = 100.0;
 const MAX_ROTATION_SPEED: f32 = PI * 4.0;
 
@@ -406,7 +406,8 @@ impl BrainState {
         // See if the enemy can be reasonably found on the map and if so, add it
         // to the enemy history ringbuffer
 
-        let score_requirement = 3.2 - AGGRESSIVENESS;
+        // NOTE: Higher score is easier match
+        let score_requirement = 3.2 + AGGRESSIVENESS;
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
