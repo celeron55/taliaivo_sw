@@ -5,7 +5,6 @@
 
 // Halt on panic
 //use panic_halt as _; // panic handler
-use cortex_m_rt::entry;
 use stm32f4xx_hal as hal;
 use crate::hal::{pac, prelude::*};
 use arrayvec::ArrayVec;
@@ -116,7 +115,6 @@ impl RobotInterface for Robot {
     }
 }
 
-//#[entry]
 #[cortex_m_rt::entry]
 fn main() -> ! {
     let mut brain = BrainState::new(0);
@@ -126,26 +124,31 @@ fn main() -> ! {
         pac::Peripherals::take(),
         cortex_m::peripheral::Peripherals::take(),
     ) {
-        // Set up the LED
+        // Set up i/o
         let gpioa = dp.GPIOA.split();
         let mut led = gpioa.pa8.into_push_pull_output();
+        let gpiob = dp.GPIOB.split();
+        let mut debug_pin = gpiob.pb10.into_push_pull_output();
 
-        // Set up the system clock. We want to run at 48MHz for this one.
-		// TODO: 168MHz
+        // Configure system clock
         let rcc = dp.RCC.constrain();
-        let clocks = rcc.cfgr.sysclk(48.MHz()).freeze();
+        //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
+        let clocks = rcc.cfgr
+            .use_hse(16.MHz()) // Use external crystal (HSE)
+            .sysclk(168.MHz()) // Set system clock (SYSCLK)
+            .freeze(); // Apply the configuration
 
         // Create a delay abstraction based on SysTick
         let mut delay = cp.SYST.delay(&clocks);
 
         loop {
-            // On for 1s, off for 1s.
-            led.toggle();
-            // TODO
             brain.update(&mut robot);
-            led.toggle();
 
-            delay.delay_ms(10_u32);
+            led.set_high();
+            debug_pin.set_high();
+            delay.delay_us(100_u32);
+            led.set_low();
+            debug_pin.set_low();
         }
     }
 
