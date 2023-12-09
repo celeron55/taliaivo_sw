@@ -119,10 +119,8 @@ impl RobotInterface for Robot {
 //#[entry]
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    //let mut brain = BrainState::new(0);
-    //let mut robot: Robot = Robot::new();
-    // TODO: Call in a loop
-    //brain.update(&mut robot);
+    let mut brain = BrainState::new(0);
+    let mut robot: Robot = Robot::new();
 
     if let (Some(dp), Some(cp)) = (
         pac::Peripherals::take(),
@@ -143,7 +141,11 @@ fn main() -> ! {
         loop {
             // On for 1s, off for 1s.
             led.toggle();
-            delay.delay_ms(1000_u32);
+            // TODO
+            brain.update(&mut robot);
+            led.toggle();
+
+            delay.delay_ms(10_u32);
         }
     }
 
