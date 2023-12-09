@@ -30,3 +30,4 @@ In another terminal:
 $ cd sumobrain_embedded
 $ arm-none-eabi-gdb ../target/thumbv7em-none-eabihf/release/sumobrain_embedded
 (gdb) target extended-remote localhost:3333
+(gdb) break Reset
