@@ -8,7 +8,8 @@ use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-use libc_print::std_name::println;
+//use libc_print::std_name::println;
+use micromath::F32Ext; // f32.sin and f32.cos
 pub use map::*;
 
 pub const UPS: u32 = 100; // Updates per second

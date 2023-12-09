@@ -1,8 +1,10 @@
 extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::ArrayVec;
-use libc_print::std_name::{println, print};
+//use libc_print::std_name::{println, print};
 use nalgebra::{Vector2, Point2};
+use micromath::F32Ext; // f32.sin and f32.cos
+use core::cmp::Ordering;
 
 pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm
@@ -119,7 +121,7 @@ impl Map {
         self.data = new_data;
     }
 
-    pub fn print(&self, robot_pos: Point2<f32>) {
+    /*pub fn print(&self, robot_pos: Point2<f32>) {
         let robot_x = (robot_pos.x / self.tile_wh).round() as u32;
         let robot_y = (robot_pos.y / self.tile_wh).round() as u32;
         for y in 0..self.height {
@@ -143,7 +145,7 @@ impl Map {
             }
             println!(); // New line at the end of each row
         }
-    }
+    }*/
 
     pub fn find_pattern<F>(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32,
             ignore_map_below_significance: f32, score_for_ignore: f32, filter: F)
@@ -332,6 +334,36 @@ pub fn angle_difference(angle1: f32, angle2: f32) -> f32 {
     if diff > 180.0 { 360.0 - diff } else { diff }
 }
 
+fn quicksort<T, F>(arr: &mut [T], compare: &F)
+where
+    F: Fn(&T, &T) -> Ordering,
+{
+    if arr.len() > 1 {
+        let p = partition(arr, compare);
+        quicksort(&mut arr[0..p], compare);
+        quicksort(&mut arr[p + 1..], compare);
+    }
+}
+
+fn partition<T, F>(arr: &mut [T], compare: &F) -> usize
+where
+    F: Fn(&T, &T) -> Ordering,
+{
+    let pivot_index = arr.len() / 2;
+    arr.swap(pivot_index, arr.len() - 1);
+    let mut i = 0;
+
+    for j in 0..arr.len() - 1 {
+        if compare(&arr[j], &arr[arr.len() - 1]) != Ordering::Greater {
+            arr.swap(i, j);
+            i += 1;
+        }
+    }
+
+    arr.swap(i, arr.len() - 1);
+    i
+}
+
 // units: tiles
 pub fn calculate_intersection(ray_origin: Vector2<f32>, ray_direction: Vector2<f32>,
         line: &HoughLine) -> Option<Vector2<f32>> {
@@ -456,7 +488,11 @@ impl Map {
         //line_candidates = self.merge_similar_lines(line_candidates);
 
         // Sort by votes and select top lines
-        line_candidates.sort_by(|a, b| b.votes.cmp(&a.votes)); // Sort in descending order of votes
+        // Sort in descending order of votes
+        // NOTE: ArrayVec::sort_by is not available with no_std
+        //line_candidates.sort_by(|a, b| b.votes.cmp(&a.votes));
+        // Use our own quicksort instead
+        quicksort(&mut line_candidates, &|a: &HoughLine, b: &HoughLine| b.votes.cmp(&a.votes));
         line_candidates.truncate(KEEP_NUM_TOP_LINES); // Keep only the top lines
 
         return line_candidates;
