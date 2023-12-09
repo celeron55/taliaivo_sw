@@ -104,37 +104,33 @@ fn main() -> ! {
     let mut brain = BrainState::new(0);
     let mut robot: Robot = Robot::new();
 
-    if let (Some(dp), Some(cp)) = (
-        pac::Peripherals::take(),
-        cortex_m::peripheral::Peripherals::take(),
-    ) {
-        // Set up i/o
-        let gpioa = dp.GPIOA.split();
-        let mut led = gpioa.pa8.into_push_pull_output();
-        let gpiob = dp.GPIOB.split();
-        let mut debug_pin = gpiob.pb10.into_push_pull_output();
+    let dp = pac::Peripherals::take().unwrap();
+    let cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
-        // Configure system clock
-        let rcc = dp.RCC.constrain();
-        //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
-        let clocks = rcc.cfgr
-            .use_hse(16.MHz()) // Use external crystal (HSE)
-            .sysclk(168.MHz()) // Set system clock (SYSCLK)
-            .freeze(); // Apply the configuration
+    // Set up i/o
+    let gpioa = dp.GPIOA.split();
+    let mut led = gpioa.pa8.into_push_pull_output();
+    let gpiob = dp.GPIOB.split();
+    let mut debug_pin = gpiob.pb10.into_push_pull_output();
 
-        // Create a delay abstraction based on SysTick
-        let mut delay = cp.SYST.delay(&clocks);
+    // Configure system clock
+    let rcc = dp.RCC.constrain();
+    //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
+    let clocks = rcc.cfgr
+        .use_hse(16.MHz()) // Use external crystal (HSE)
+        .sysclk(168.MHz()) // Set system clock (SYSCLK)
+        .freeze(); // Apply the configuration
 
-        loop {
-            brain.update(&mut robot);
+    // Create a delay abstraction based on SysTick
+    let mut delay = cp.SYST.delay(&clocks);
 
-            led.set_high();
-            debug_pin.set_high();
-            delay.delay_us(100_u32);
-            led.set_low();
-            debug_pin.set_low();
-        }
+    loop {
+        brain.update(&mut robot);
+
+        led.set_high();
+        debug_pin.set_high();
+        delay.delay_us(100_u32);
+        led.set_low();
+        debug_pin.set_low();
     }
-
-    loop {}
 }
