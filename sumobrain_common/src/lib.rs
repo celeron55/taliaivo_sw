@@ -12,7 +12,7 @@ use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use micromath::F32Ext; // f32.sin and f32.cos
 pub use map::*;
 
-pub const UPS: u32 = 100; // Updates per second
+pub const UPS: u32 = 50; // Updates per second
 const ENEMY_HISTORY_LENGTH: usize = 50;
 
 // Arena configuration
