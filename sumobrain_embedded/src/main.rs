@@ -16,8 +16,22 @@ use core::ops::DerefMut;
 use sumobrain_common::{RobotInterface, BrainState, Map};
 use sumobrain_common::map::HoughLine;
 
-static GPIO_LED: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
+static LED_PIN: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
         Mutex::new(RefCell::new(None));
+static DEBUG_PIN: Mutex<RefCell<Option<gpio::gpiob::PB10<gpio::Output<gpio::PushPull>>>>> =
+        Mutex::new(RefCell::new(None));
+static GLOBAL_TIME_MS: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
+
+fn millis() -> u32 {
+    cortex_m::interrupt::free(|cs| {
+        *GLOBAL_TIME_MS.borrow(cs).borrow()
+    })
+}
+
+fn timestamp_age(t0: u32) -> u32 {
+    let t1 = millis();
+    t1 - t0
+}
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -115,53 +129,72 @@ fn main() -> ! {
     let mut cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
     // Set up i/o
-    let gpioa = dp.GPIOA.split();
-    let mut led = gpioa.pa8.into_push_pull_output();
+    let mut led_pin = dp.GPIOA.split().pa8.into_push_pull_output();
+    let mut debug_pin = dp.GPIOB.split().pb10.into_push_pull_output();
     cortex_m::interrupt::free(|cs| {
-        GPIO_LED.borrow(cs).replace(Some(led));
+        LED_PIN.borrow(cs).replace(Some(led_pin));
+        DEBUG_PIN.borrow(cs).replace(Some(debug_pin));
     });
-    let gpiob = dp.GPIOB.split();
-    let mut debug_pin = gpiob.pb10.into_push_pull_output();
 
     // Configure system clock
     let rcc = dp.RCC.constrain();
     //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
+    //let clocks = rcc.cfgr.sysclk(168.MHz()).freeze();
     let clocks = rcc.cfgr
         .use_hse(16.MHz()) // Use external crystal (HSE)
+        .hclk(168.MHz())
+        .pclk1(42.MHz())
+        .pclk2(84.MHz())
         .sysclk(168.MHz()) // Set system clock (SYSCLK)
+        //.require_pll48clk() // ???
+        //.i2s_clk(86.MHz())
         .freeze(); // Apply the configuration
 
-    // Set up 10ms SysTick
-    cp.SYST.set_reload(1680000-1);
+    // Set up 1ms SysTick
+    cp.SYST.set_reload((clocks.sysclk().to_Hz() / 1000) - 1);
     cp.SYST.clear_current();
     cp.SYST.enable_counter();
     cp.SYST.enable_interrupt();
 
     // Create a delay abstraction based on SysTick
-    let mut delay = cp.SYST.delay(&clocks);
+    //let mut delay = cp.SYST.delay(&clocks);
+    //delay.delay_us(100_u32);
 
     cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut led) = GPIO_LED.borrow(cs).borrow_mut().deref_mut() {
+        if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
             led.set_high();
-            //led.set_low();
-            //led.set_state(true.into());
         }
     });
+
+    let mut last_led_toggle_timestamp = millis();
 
     loop {
         brain.update(&mut robot);
 
-        debug_pin.set_high();
-        delay.delay_us(100_u32);
-        debug_pin.set_low();
+        //debug_pin.toggle();
+
+        if timestamp_age(last_led_toggle_timestamp) >= 500 {
+            last_led_toggle_timestamp = millis();
+
+            cortex_m::interrupt::free(|cs| {
+                if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
+                    led.toggle();
+                }
+            });
+        }
     }
 }
 
+// FIXME: This happens every 8ms instead of every 1ms
 #[exception]
 fn SysTick() {
     cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut led) = GPIO_LED.borrow(cs).borrow_mut().deref_mut() {
-            led.toggle();
+        if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
+            debug_pin.toggle();
         }
+    });
+    cortex_m::interrupt::free(|cs| {
+        let mut global_time_ms = GLOBAL_TIME_MS.borrow(cs).borrow_mut();
+        *global_time_ms += 1;
     });
 }
