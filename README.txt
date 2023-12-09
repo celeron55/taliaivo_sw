@@ -19,3 +19,14 @@ $ cargo build
 $ valgrind --tool=massif --heap=no --stacks=yes ../target/debug/sumobrain_simulator
 $ ms_print massif.out.<pid> | less
 
+Debugging on physical hardware
+------------------------------
+$ cd sumobrain_embedded
+$ ./build_release.sh
+$ ./flash_release.sh
+$ openocd -f interface/stlink.cfg -f target/stm32f4x.cfg
+
+In another terminal:
+$ cd sumobrain_embedded
+$ arm-none-eabi-gdb ../target/thumbv7em-none-eabihf/release/sumobrain_embedded
+(gdb) target extended-remote localhost:3333
