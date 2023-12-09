@@ -136,9 +136,6 @@ fn main() -> ! {
     cp.SYST.clear_current();
     cp.SYST.enable_counter();
     cp.SYST.enable_interrupt();
-    //unsafe { cp.SYST.rvr.write(1680000) }; // Reload value
-    //unsafe { cp.SYST.cvr.write(1680000) }; // Current value
-    //unsafe { cp.SYST.csr.write(0x0105) }; // Enable timer, disable interrupt
 
     // Create a delay abstraction based on SysTick
     let mut delay = cp.SYST.delay(&clocks);
@@ -146,14 +143,12 @@ fn main() -> ! {
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut led) = GPIO_LED.borrow(cs).borrow_mut().deref_mut() {
             led.set_high();
+            //led.set_low();
+            //led.set_state(true.into());
         }
     });
 
     loop {
-        //led.set_high();
-        //led.set_low();
-        //led.set_state(true.into());
-
         brain.update(&mut robot);
 
         debug_pin.set_high();
