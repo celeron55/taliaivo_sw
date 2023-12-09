@@ -19,6 +19,11 @@ $ cargo build
 $ valgrind --tool=massif --heap=no --stacks=yes ../target/debug/sumobrain_simulator
 $ ms_print massif.out.<pid> | less
 
+Compiling and flashing physical hardware
+----------------------------------------
+$ cd sumobrain_embedded
+$ ./build_release.sh && ./flash_release.sh
+
 Debugging on physical hardware
 ------------------------------
 $ cd sumobrain_embedded

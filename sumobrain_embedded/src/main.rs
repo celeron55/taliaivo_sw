@@ -82,7 +82,13 @@ impl RobotInterface for Robot {
     // Returns a list of (angle, distance (cm), something_seen) tuples for each sensor
     fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32, bool), 6> {
         // TODO
-        let proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6> = ArrayVec::new();
+        let mut proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6> = ArrayVec::new();
+        proximity_sensor_readings.push((  0.0, 30.0, true));
+        proximity_sensor_readings.push((-45.0, 30.0, true));
+        proximity_sensor_readings.push(( 45.0, 30.0, true));
+        proximity_sensor_readings.push((-90.0, 30.0, true));
+        proximity_sensor_readings.push(( 90.0, 30.0, true));
+        proximity_sensor_readings.push((180.0, 30.0, true));
         return proximity_sensor_readings;
     }
     // X, Y, Z axis values
