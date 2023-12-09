@@ -2,6 +2,7 @@
 
 .*
 !.gitignore
+!.cargo
 *~
 *.bak*
 *.o

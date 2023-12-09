@@ -15,5 +15,6 @@ panic-halt = "0.2.0"
 
 [dependencies.stm32f4xx-hal]
 version = "0.17.1"
-features = ["stm32f407", "defmt"] # Adjust for your microcontroller model
+#features = ["stm32f407", "defmt"] # Adjust for your microcontroller model
+features = ["stm32f407"]
 
