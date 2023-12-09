@@ -3,14 +3,21 @@
 #![no_main]
 #![no_std]
 
-// Halt on panic
-//use panic_halt as _; // panic handler
 use stm32f4xx_hal as hal;
+use stm32f4xx_hal::{prelude::*, interrupt, gpio};
+use cortex_m_rt::{entry, exception};
+use cortex_m::interrupt::{Mutex, CriticalSection};
 use crate::hal::{pac, prelude::*};
 use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
+use core::cell::RefCell;
+use core::ops::DerefMut;
+
 use sumobrain_common::{RobotInterface, BrainState, Map};
 use sumobrain_common::map::HoughLine;
+
+static GPIO_LED: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
+        Mutex::new(RefCell::new(None));
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -99,17 +106,20 @@ impl RobotInterface for Robot {
     }
 }
 
-#[cortex_m_rt::entry]
+#[entry]
 fn main() -> ! {
     let mut brain = BrainState::new(0);
     let mut robot: Robot = Robot::new();
 
     let dp = pac::Peripherals::take().unwrap();
-    let cp = cortex_m::peripheral::Peripherals::take().unwrap();
+    let mut cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
     // Set up i/o
     let gpioa = dp.GPIOA.split();
     let mut led = gpioa.pa8.into_push_pull_output();
+    cortex_m::interrupt::free(|cs| {
+        GPIO_LED.borrow(cs).replace(Some(led));
+    });
     let gpiob = dp.GPIOB.split();
     let mut debug_pin = gpiob.pb10.into_push_pull_output();
 
@@ -121,16 +131,42 @@ fn main() -> ! {
         .sysclk(168.MHz()) // Set system clock (SYSCLK)
         .freeze(); // Apply the configuration
 
+    // Set up 10ms SysTick
+    cp.SYST.set_reload(1680000-1);
+    cp.SYST.clear_current();
+    cp.SYST.enable_counter();
+    cp.SYST.enable_interrupt();
+    //unsafe { cp.SYST.rvr.write(1680000) }; // Reload value
+    //unsafe { cp.SYST.cvr.write(1680000) }; // Current value
+    //unsafe { cp.SYST.csr.write(0x0105) }; // Enable timer, disable interrupt
+
     // Create a delay abstraction based on SysTick
     let mut delay = cp.SYST.delay(&clocks);
 
+    cortex_m::interrupt::free(|cs| {
+        if let Some(ref mut led) = GPIO_LED.borrow(cs).borrow_mut().deref_mut() {
+            led.set_high();
+        }
+    });
+
     loop {
+        //led.set_high();
+        //led.set_low();
+        //led.set_state(true.into());
+
         brain.update(&mut robot);
 
-        led.set_high();
         debug_pin.set_high();
         delay.delay_us(100_u32);
-        led.set_low();
         debug_pin.set_low();
     }
+}
+
+#[exception]
+fn SysTick() {
+    cortex_m::interrupt::free(|cs| {
+        if let Some(ref mut led) = GPIO_LED.borrow(cs).borrow_mut().deref_mut() {
+            led.toggle();
+        }
+    });
 }
