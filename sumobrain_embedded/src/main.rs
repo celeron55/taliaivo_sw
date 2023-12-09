@@ -146,32 +146,48 @@ fn main() -> ! {
         .pclk1(42.MHz())
         .pclk2(84.MHz())
         .sysclk(168.MHz()) // Set system clock (SYSCLK)
-        //.require_pll48clk() // ???
-        //.i2s_clk(86.MHz())
         .freeze(); // Apply the configuration
+    /*let clocks = rcc.cfgr
+        .use_hse(16.MHz()) // Use external crystal (HSE)
+        .sysclk(96.MHz()) // Set system clock (SYSCLK)
+        .freeze(); // Apply the configuration*/
 
     // Set up 1ms SysTick
-    cp.SYST.set_reload((clocks.sysclk().to_Hz() / 1000) - 1);
+    let systick_interval_ms = 1;
+    //cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1);
+    // No idea what's going on
+    cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms / 8 - 1);
     cp.SYST.clear_current();
     cp.SYST.enable_counter();
     cp.SYST.enable_interrupt();
 
     // Create a delay abstraction based on SysTick
-    //let mut delay = cp.SYST.delay(&clocks);
-    //delay.delay_us(100_u32);
+    /*let mut delay = cp.SYST.delay(&clocks);
+    loop {
+        delay.delay_us(500000_u32);
+        cortex_m::interrupt::free(|cs| {
+            if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
+                led.toggle();
+            }
+        });
+    }*/
 
-    cortex_m::interrupt::free(|cs| {
+    /*cortex_m::interrupt::free(|cs| {
         if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
             led.set_high();
         }
-    });
+    });*/
 
     let mut last_led_toggle_timestamp = millis();
 
     loop {
         brain.update(&mut robot);
 
-        //debug_pin.toggle();
+        cortex_m::interrupt::free(|cs| {
+            if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
+                debug_pin.toggle();
+            }
+        });
 
         if timestamp_age(last_led_toggle_timestamp) >= 500 {
             last_led_toggle_timestamp = millis();
@@ -185,15 +201,15 @@ fn main() -> ! {
     }
 }
 
-// FIXME: This happens every 8ms instead of every 1ms
 #[exception]
 fn SysTick() {
     cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
+        /*if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
+            led.toggle();
+        }*/
+        /*if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
             debug_pin.toggle();
-        }
-    });
-    cortex_m::interrupt::free(|cs| {
+        }*/
         let mut global_time_ms = GLOBAL_TIME_MS.borrow(cs).borrow_mut();
         *global_time_ms += 1;
     });
