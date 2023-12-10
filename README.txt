@@ -21,8 +21,16 @@ $ ms_print massif.out.<pid> | less
 
 Compiling and flashing physical hardware
 ----------------------------------------
+$ mkdir lib
+$ cd lib
+$ git clone --depth=1 https://github.com/embassy-rs/embassy.git
+$ cd embassy
+$ git checkout 343be37f397ff82eb9d34161920449cc4b45c31a
 $ cd sumobrain_embedded
 $ ./build_release.sh && ./flash_release.sh
+
+This also kind of works, but RTT logging is not set up so it will complain after flashing succeeds:
+$ cargo run --release
 
 Debugging on physical hardware
 ------------------------------

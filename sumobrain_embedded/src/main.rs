@@ -1,29 +1,46 @@
-#![deny(unsafe_code)]
-#![allow(clippy::empty_loop)]
-#![no_main]
 #![no_std]
+#![no_main]
+#![feature(type_alias_impl_trait)]
+//#![deny(unsafe_code)]
+//#![allow(clippy::empty_loop)]
 
-use stm32f4xx_hal as hal;
-use stm32f4xx_hal::{prelude::*, interrupt, gpio, otg_fs::{USB, UsbBus}};
-use cortex_m_rt::{entry, exception};
-use cortex_m::interrupt::{Mutex, CriticalSection};
-use crate::hal::{pac, prelude::*};
-use usb_device::{prelude::*};
-use usbd_serial::{SerialPort, USB_CLASS_CDC};
+use sumobrain_common::{RobotInterface, BrainState, Map};
+use sumobrain_common::map::HoughLine;
 
 use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::cell::RefCell;
 use core::ops::DerefMut;
 
-use sumobrain_common::{RobotInterface, BrainState, Map};
-use sumobrain_common::map::HoughLine;
+//use stm32f4xx_hal as hal;
+//use stm32f4xx_hal::{prelude::*, interrupt, gpio, otg_fs::{USB, UsbBus}};
+//use crate::hal::{pac, prelude::*};
+//use usb_device::{prelude::*};
+//use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
-static LED_PIN: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
+use cortex_m_rt::{entry, exception};
+use cortex_m::interrupt::{Mutex, CriticalSection};
+use embassy_stm32::Peripherals;
+use core::sync::atomic::{AtomicU32, Ordering};
+//use defmt::{panic, *};
+use embassy_executor::Spawner;
+use embassy_stm32::exti::ExtiInput;
+use embassy_stm32::gpio::{AnyPin, Input, Level, Output, Pin, Pull, Speed};
+use embassy_stm32::time::Hertz;
+use embassy_stm32::usb_otg::{Driver, Instance};
+use embassy_stm32::{bind_interrupts, peripherals, usb_otg, Config};
+use embassy_time::{Duration, Timer};
+use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::driver::EndpointError;
+use embassy_usb::Builder;
+use futures::future::join;
+//use {defmt_rtt as _, panic_probe as _};
+
+/*static LED_PIN: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
         Mutex::new(RefCell::new(None));
 static DEBUG_PIN: Mutex<RefCell<Option<gpio::gpiob::PB10<gpio::Output<gpio::PushPull>>>>> =
-        Mutex::new(RefCell::new(None));
-static GLOBAL_TIME_MS: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
+        Mutex::new(RefCell::new(None));*/
+/*static GLOBAL_TIME_MS: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
 
 fn millis() -> u32 {
     cortex_m::interrupt::free(|cs| {
@@ -34,7 +51,7 @@ fn millis() -> u32 {
 fn timestamp_age(t0: u32) -> u32 {
     let t1 = millis();
     t1 - t0
-}
+}*/
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -123,28 +140,51 @@ impl RobotInterface for Robot {
     }
 }
 
-#[entry]
-fn main() -> ! {
-    let mut brain = BrainState::new(0);
-    let mut robot: Robot = Robot::new();
+#[embassy_executor::main]
+async fn main(_spawner: Spawner) {
+    let mut config = Config::default();
+    {
+        use embassy_stm32::rcc::*;
+        config.rcc.hse = Some(Hse {
+            freq: Hertz(16_000_000),
+            mode: HseMode::Oscillator,
+        });
+        config.rcc.pll_src = PllSource::HSE;
+        config.rcc.pll = Some(Pll {
+            prediv: PllPreDiv::DIV8,
+            mul: PllMul::MUL168,
+            divp: Some(PllPDiv::DIV2), // 8mhz / 4 * 168 / 2 = 168Mhz.
+            divq: Some(PllQDiv::DIV7), // 8mhz / 4 * 168 / 7 = 48Mhz.
+            divr: None,
+        });
+        config.rcc.ahb_pre = AHBPrescaler::DIV1;
+        config.rcc.apb1_pre = APBPrescaler::DIV4;
+        config.rcc.apb2_pre = APBPrescaler::DIV2;
+        config.rcc.sys = Sysclk::PLL1_P;
+    }
+    let p = embassy_stm32::init(config);
 
-    let dp = pac::Peripherals::take().unwrap();
-    let mut cp = cortex_m::peripheral::Peripherals::take().unwrap();
+    //info!("Hello World!");
+
+    //let dp = pac::Peripherals::take().unwrap();
+    //let mut cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
     // I/O
 
-    let gpioa = dp.GPIOA.split();
+    let mut led = Output::new(p.PA8, Level::High, Speed::Low);
+
+    /*let gpioa = dp.GPIOA.split();
     let mut led_pin = gpioa.pa8.into_push_pull_output();
     led_pin.set_high();
-    let mut debug_pin = dp.GPIOB.split().pb10.into_push_pull_output();
-    cortex_m::interrupt::free(|cs| {
+    let mut debug_pin = dp.GPIOB.split().pb10.into_push_pull_output();*/
+    /*cortex_m::interrupt::free(|cs| {
         LED_PIN.borrow(cs).replace(Some(led_pin));
         DEBUG_PIN.borrow(cs).replace(Some(debug_pin));
-    });
+    });*/
 
     // System clock
 
-    let rcc = dp.RCC.constrain();
+    /*let rcc = dp.RCC.constrain();
     //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
     //let clocks = rcc.cfgr.sysclk(168.MHz()).freeze();
     // Results in about 39mA taken via USB with stlink not connected
@@ -155,18 +195,18 @@ fn main() -> ! {
         .pclk1(42.MHz())
         .pclk2(84.MHz())
         .sysclk(168.MHz()) // Set system clock (SYSCLK)
-        .freeze(); // Apply the configuration
+        .freeze(); // Apply the configuration*/
 
     // SysTick
 
-    let systick_interval_ms = 1;
+    /*let systick_interval_ms = 1;
     //cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1);
     // No idea what's going on, for some reason the value needs to be divided by
     // 8 in order to get correct timing
     cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms / 8 - 1);
     cp.SYST.clear_current();
     cp.SYST.enable_counter();
-    cp.SYST.enable_interrupt();
+    cp.SYST.enable_interrupt();*/
 
     // Create a delay abstraction based on SysTick
     /*let mut delay = cp.SYST.delay(&clocks);
@@ -181,7 +221,7 @@ fn main() -> ! {
 
     // USB
 
-    let gpioa = dp.GPIOA.split();
+    /*
     let usb = USB {
         usb_global: dp.OTG_FS_GLOBAL,
         usb_device: dp.OTG_FS_DEVICE,
@@ -203,21 +243,33 @@ fn main() -> ! {
                 .serial_number("NO_SERIAL")
         ]).unwrap()
         .build();
+    */
 
     // Main loop
 
-    let mut last_led_toggle_timestamp = millis();
+    let mut brain = BrainState::new(0);
+    let mut robot: Robot = Robot::new();
+
+    //let mut last_led_toggle_timestamp = millis();
 
     loop {
         brain.update(&mut robot);
 
-        cortex_m::interrupt::free(|cs| {
+        //info!("high");
+        led.set_high();
+        Timer::after_millis(300).await;
+
+        //info!("low");
+        led.set_low();
+        Timer::after_millis(300).await;
+
+        /*cortex_m::interrupt::free(|cs| {
             if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
                 debug_pin.toggle();
             }
-        });
+        });*/
 
-        if timestamp_age(last_led_toggle_timestamp) >= 500 {
+        /*if timestamp_age(last_led_toggle_timestamp) >= 500 {
             last_led_toggle_timestamp = millis();
 
             cortex_m::interrupt::free(|cs| {
@@ -225,11 +277,11 @@ fn main() -> ! {
                     led.toggle();
                 }
             });
-        }
+        }*/
     }
 }
 
-#[exception]
+/*#[exception]
 fn SysTick() {
     cortex_m::interrupt::free(|cs| {
         /*if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
@@ -241,4 +293,4 @@ fn SysTick() {
         let mut global_time_ms = GLOBAL_TIME_MS.borrow(cs).borrow_mut();
         *global_time_ms += 1;
     });
-}
+}*/
