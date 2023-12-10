@@ -139,34 +139,15 @@ impl UsbLogger {
     async fn flush_to_usb<'d, T: embassy_stm32::usb_otg::Instance>(
             &self, sender: &mut cdc_acm::Sender<'d, Driver<'d, T>>)
             -> Result<(), Disconnected> {
-        /*// TODO: Remove
-        WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
-        // NOTE: For some reason acm.write_packet() doesn't write anything
-        //       unless we read something first. At one time, in a debugger, it
-        //       suddenly started working without read_packet though.
-        //let mut buf = [0; 64];
-        //let n = acm.read_packet(&mut buf).await?;
-        //acm.write_packet("foo\r\n".as_bytes()).await?;
-        sender.write_packet("foo\r\n".as_bytes()).await?;
-        return Ok(());*/
-
-        //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
         let mut buf2: Option<ArrayString<1024>> = Some(ArrayString::new());
         cortex_m::interrupt::free(|cs| {
             // This replaces the logger buffer with an empty one, and we get the
             // possibly filled in one
             buf2 = self.buffer.borrow(cs).replace(buf2);
-            /*if let Some(ref mut buffer) = self.buffer.borrow(cs).borrow_mut().deref_mut() {
-                if !buffer.is_empty() {
-                    //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
-                    // Write the buffer contents to the USB CDC and clear the buffer
-                    sender.write_packet(buffer.as_bytes());
-                    buffer.clear();
-                }
-            }*/
         });
         if let Some(ref mut buffer) = buf2 {
             if !buffer.is_empty() {
+                // Toggle LED
                 //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
                 // Write the buffer contents to the USB CDC and clear the buffer
                 sender.write_packet(buffer.as_bytes()).await?;
@@ -324,7 +305,7 @@ async fn main(spawner: Spawner) {
             sender.wait_connection().await;
             let flusher = flush_log_to_usb(&mut sender);
             let input_handler = usb_serial_input_handler(&mut receiver);
-            let (flusher_result, input_handler_Result) = join!(flusher, input_handler);
+            let (flusher_result, input_handler_result) = join!(flusher, input_handler);
             match flusher_result {
                 Ok(_) => (),
                 Err(_) => loop {
@@ -343,17 +324,25 @@ async fn main(spawner: Spawner) {
     let mut robot: Robot = Robot::new();
 
     let main_fut = async {
-        /*loop {
+        // For some reason a bit of delay is needed, otherwise immediate logging
+        // will permanently stop USB CDC operation
+        // NOTE: 500ms is not enough, 1000ms is sometimes enough
+        // NOTE: Maybe this delay has to be long enough to wait until a terminal
+        //       has been opened on the host. That would mean this is possibly a
+        //       workaround for something.
+        Timer::after_millis(2000).await;
+
+        loop {
             //brain.update(&mut robot);
 
             info!("high");
-            //WANTED_LED_STATE.store(true, Ordering::Relaxed);
+            WANTED_LED_STATE.store(true, Ordering::Relaxed);
             Timer::after_millis(300).await;
 
             info!("low");
-            //WANTED_LED_STATE.store(false, Ordering::Relaxed);
+            WANTED_LED_STATE.store(false, Ordering::Relaxed);
             Timer::after_millis(300).await;
-        }*/
+        }
     };
 
     // Run everything concurrently.
