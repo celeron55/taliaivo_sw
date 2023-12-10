@@ -25,7 +25,7 @@ use embassy_stm32::gpio;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usb_otg::{Driver, Instance};
 use embassy_stm32::{bind_interrupts, peripherals, usb_otg, Config};
-use embassy_time::{Duration, Timer};
+use embassy_time::{Duration, Timer, Instant, Ticker};
 use embassy_usb::Builder;
 use embassy_usb::driver::EndpointError;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
@@ -236,8 +236,6 @@ async fn main(spawner: Spawner) {
 
     // I/O
 
-    //let mut led = Output::new(p.PA8, gpio::Level::High, Speed::Low);
-
     /*let gpioa = dp.GPIOA.split();
     let mut led_pin = gpioa.pa8.into_push_pull_output();
     led_pin.set_high();
@@ -333,10 +331,17 @@ async fn main(spawner: Spawner) {
     let mut robot: Robot = Robot::new();
 
     let main_fut = async {
+        let interval_us = 1000000 / sumobrain_common::UPS as u64;
+        let mut ticker = Ticker::every(Duration::from_micros(interval_us));
         loop {
             brain.update(&mut robot);
 
             info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+
+            // Make sure other tasks get at least some time
+            Timer::after_millis(1).await;
+
+            ticker.next().await;
 
             /*info!("high");
             WANTED_LED_STATE.store(true, Ordering::Relaxed);
