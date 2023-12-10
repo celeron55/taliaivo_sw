@@ -34,6 +34,7 @@ use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
 use futures::future::join;
+use futures::join;
 //use {defmt_rtt as _, panic_probe as _};
 
 /*static LED_PIN: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
@@ -57,6 +58,10 @@ fn timestamp_age(t0: u32) -> u32 {
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
     loop {}
 }
+
+bind_interrupts!(struct Irqs {
+    OTG_FS => usb_otg::InterruptHandler<peripherals::USB_OTG_FS>;
+});
 
 // TODO: Implement
 struct Robot {
@@ -245,6 +250,66 @@ async fn main(_spawner: Spawner) {
         .build();
     */
 
+    // Create the driver, from the HAL.
+    let mut ep_out_buffer = [0u8; 256];
+    let mut config = embassy_stm32::usb_otg::Config::default();
+    // NOTE: For this, VBUS would have to be connected to PA9
+    //config.vbus_detection = true;
+    config.vbus_detection = false;
+    let driver = Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, &mut ep_out_buffer, config);
+
+    // Create embassy-usb Config
+    let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
+    config.manufacturer = Some("8Dromeda Productions");
+    config.product = Some("Taliaivo");
+    config.serial_number = Some("1337");
+
+    // Required for windows compatibility.
+    // https://developer.nordicsemi.com/nRF_Connect_SDK/doc/1.9.1/kconfig/CONFIG_CDC_ACM_IAD.html#help
+    config.device_class = 0xEF;
+    config.device_sub_class = 0x02;
+    config.device_protocol = 0x01;
+    config.composite_with_iads = true;
+
+    // Create embassy-usb DeviceBuilder using the driver and config.
+    // It needs some buffers for building the descriptors.
+    let mut device_descriptor = [0; 256];
+    let mut config_descriptor = [0; 256];
+    let mut bos_descriptor = [0; 256];
+    let mut control_buf = [0; 64];
+
+    let mut state = State::new();
+
+    let mut builder = Builder::new(
+        driver,
+        config,
+        &mut device_descriptor,
+        &mut config_descriptor,
+        &mut bos_descriptor,
+        &mut [], // no msos descriptors
+        &mut control_buf,
+    );
+
+    // Create classes on the builder.
+    let mut acm = CdcAcmClass::new(&mut builder, &mut state, 64);
+
+    // Build the builder.
+    let mut usb = builder.build();
+
+    // Run the USB device.
+    let usb_fut = usb.run();
+
+    // Handle the ACM class
+    let acm_fut = async {
+        loop {
+            acm.wait_connection().await;
+            //info!("Connected");
+            let _ = echo(&mut acm).await;
+            // TODO
+            //info!("Disconnected");
+        }
+    };
+
     // Main loop
 
     let mut brain = BrainState::new(0);
@@ -252,33 +317,39 @@ async fn main(_spawner: Spawner) {
 
     //let mut last_led_toggle_timestamp = millis();
 
-    loop {
-        brain.update(&mut robot);
+    let main_fut = async {
+        loop {
+            brain.update(&mut robot);
 
-        //info!("high");
-        led.set_high();
-        Timer::after_millis(300).await;
+            //info!("high");
+            led.set_high();
+            Timer::after_millis(300).await;
 
-        //info!("low");
-        led.set_low();
-        Timer::after_millis(300).await;
+            //info!("low");
+            led.set_low();
+            Timer::after_millis(300).await;
 
-        /*cortex_m::interrupt::free(|cs| {
-            if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
-                debug_pin.toggle();
-            }
-        });*/
-
-        /*if timestamp_age(last_led_toggle_timestamp) >= 500 {
-            last_led_toggle_timestamp = millis();
-
-            cortex_m::interrupt::free(|cs| {
-                if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
-                    led.toggle();
+            /*cortex_m::interrupt::free(|cs| {
+                if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
+                    debug_pin.toggle();
                 }
-            });
-        }*/
-    }
+            });*/
+
+            /*if timestamp_age(last_led_toggle_timestamp) >= 500 {
+                last_led_toggle_timestamp = millis();
+
+                cortex_m::interrupt::free(|cs| {
+                    if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
+                        led.toggle();
+                    }
+                });
+            }*/
+        }
+    };
+
+    // Run everything concurrently.
+    // If we had made everything `'static` above instead, we could do this using separate tasks instead.
+    join!(usb_fut, acm_fut, main_fut);
 }
 
 /*#[exception]
@@ -294,3 +365,24 @@ fn SysTick() {
         *global_time_ms += 1;
     });
 }*/
+
+struct Disconnected {}
+
+impl From<EndpointError> for Disconnected {
+    fn from(val: EndpointError) -> Self {
+        match val {
+            EndpointError::BufferOverflow => panic!("Buffer overflow"),
+            EndpointError::Disabled => Disconnected {},
+        }
+    }
+}
+
+async fn echo<'d, T: Instance + 'd>(class: &mut CdcAcmClass<'d, Driver<'d, T>>) -> Result<(), Disconnected> {
+    let mut buf = [0; 64];
+    loop {
+        let n = class.read_packet(&mut buf).await?;
+        let data = &buf[..n];
+        //info!("data: {:x}", data);
+        class.write_packet(data).await?;
+    }
+}

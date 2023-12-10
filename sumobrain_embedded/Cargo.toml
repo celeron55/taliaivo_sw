@@ -33,7 +33,7 @@ embedded-hal = "0.2.6"
 embedded-io = { version = "0.6.0" }
 embedded-io-async = { version = "0.6.1" }
 #panic-probe = { version = "0.3", features = ["print-defmt"] }
-panic-probe = { version = "0.3", features = [] }
+#panic-probe = { version = "0.3", features = [] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 heapless = { version = "0.8", default-features = false }
 nb = "1.0.0"
