@@ -167,7 +167,7 @@ impl UsbLogger {
         });
         if let Some(ref mut buffer) = buf2 {
             if !buffer.is_empty() {
-                WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
+                //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
                 // Write the buffer contents to the USB CDC and clear the buffer
                 sender.write_packet(buffer.as_bytes()).await?;
             }
@@ -192,7 +192,7 @@ impl Log for UsbLogger {
     }
 
     fn flush(&self) {
-        // Flushing might be handled asynchronously elsewhere
+        // Flushing is handled elsewhere
     }
 }
 
@@ -321,13 +321,11 @@ async fn main(spawner: Spawner) {
     // Handle the ACM class
     let acm_fut = async {
         loop {
-            //acm.wait_connection().await;
             sender.wait_connection().await;
             let flusher = flush_log_to_usb(&mut sender);
             let input_handler = usb_serial_input_handler(&mut receiver);
-            join!(flusher, input_handler);
-            /*let result = flusher.await;
-            match result {
+            let (flusher_result, input_handler_Result) = join!(flusher, input_handler);
+            match flusher_result {
                 Ok(_) => (),
                 Err(_) => loop {
                     WANTED_LED_STATE.store(true, Ordering::Relaxed);
@@ -335,14 +333,14 @@ async fn main(spawner: Spawner) {
                     WANTED_LED_STATE.store(false, Ordering::Relaxed);
                     Timer::after_millis(125).await;
                 },
-            };*/
+            };
         }
     };
 
     // Main loop
 
-    //let mut brain = BrainState::new(0);
-    //let mut robot: Robot = Robot::new();
+    let mut brain = BrainState::new(0);
+    let mut robot: Robot = Robot::new();
 
     let main_fut = async {
         /*loop {
