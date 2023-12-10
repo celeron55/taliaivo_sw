@@ -26,9 +26,10 @@ use embassy_stm32::time::Hertz;
 use embassy_stm32::usb_otg::{Driver, Instance};
 use embassy_stm32::{bind_interrupts, peripherals, usb_otg, Config};
 use embassy_time::{Duration, Timer};
-use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
-use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
+use embassy_usb::driver::EndpointError;
+use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::class::cdc_acm;
 use futures::future::join;
 use futures::join;
 use log;
@@ -136,17 +137,18 @@ struct UsbLogger {
 
 impl UsbLogger {
     async fn flush_to_usb<'d, T: embassy_stm32::usb_otg::Instance>(
-            &self, acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
+            &self, sender: &mut cdc_acm::Sender<'d, Driver<'d, T>>)
             -> Result<(), Disconnected> {
-        // TODO: Remove
+        /*// TODO: Remove
+        WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
         // NOTE: For some reason acm.write_packet() doesn't write anything
         //       unless we read something first. At one time, in a debugger, it
         //       suddenly started working without read_packet though.
-        WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
-        let mut buf = [0; 64];
-        let n = acm.read_packet(&mut buf).await?;
-        acm.write_packet("foo\r\n".as_bytes()).await?;
-        return Ok(());
+        //let mut buf = [0; 64];
+        //let n = acm.read_packet(&mut buf).await?;
+        //acm.write_packet("foo\r\n".as_bytes()).await?;
+        sender.write_packet("foo\r\n".as_bytes()).await?;
+        return Ok(());*/
 
         //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
         let mut buf2: Option<ArrayString<1024>> = Some(ArrayString::new());
@@ -158,7 +160,7 @@ impl UsbLogger {
                 if !buffer.is_empty() {
                     //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
                     // Write the buffer contents to the USB CDC and clear the buffer
-                    acm.write_packet(buffer.as_bytes());
+                    sender.write_packet(buffer.as_bytes());
                     buffer.clear();
                 }
             }*/
@@ -167,7 +169,7 @@ impl UsbLogger {
             if !buffer.is_empty() {
                 WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
                 // Write the buffer contents to the USB CDC and clear the buffer
-                acm.write_packet(buffer.as_bytes()).await?;
+                sender.write_packet(buffer.as_bytes()).await?;
             }
         }
         Ok(())
@@ -183,7 +185,7 @@ impl Log for UsbLogger {
         if self.enabled(record.metadata()) {
             cortex_m::interrupt::free(|cs| { 
                 if let Some(ref mut buffer) = self.buffer.borrow(cs).borrow_mut().deref_mut() {
-                    let _ = writeln!(buffer, "[{}] {}", record.level(), record.args());
+                    let _ = writeln!(buffer, "[{}] {}\r", record.level(), record.args());
                 }
             });
         }
@@ -207,10 +209,10 @@ fn init_logger() {
     log::set_max_level(log::LevelFilter::Info); // TODO: Adjust
 }
 
-async fn flush_log_to_usb<'d, T: Instance + 'd>(acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
+async fn flush_log_to_usb<'d, T: Instance + 'd>(sender: &mut cdc_acm::Sender<'d, Driver<'d, T>>)
         -> Result<(), Disconnected> {
     loop {
-        LOGGER.flush_to_usb(acm).await?;
+        LOGGER.flush_to_usb(sender).await?;
         // TODO: Adjust delay
         Timer::after_millis(20).await;
     }
@@ -308,6 +310,8 @@ async fn main(spawner: Spawner) {
     // Create classes on the builder.
     let mut acm = CdcAcmClass::new(&mut builder, &mut state, 64);
 
+    let (mut sender, mut receiver) = acm.split();
+
     // Build the builder.
     let mut usb = builder.build();
 
@@ -317,23 +321,21 @@ async fn main(spawner: Spawner) {
     // Handle the ACM class
     let acm_fut = async {
         loop {
-            // TODO
-            acm.wait_connection().await;
-            //info!("Connected");
-            let flusher = flush_log_to_usb(&mut acm);
-            let result = flusher.await;
+            //acm.wait_connection().await;
+            sender.wait_connection().await;
+            let flusher = flush_log_to_usb(&mut sender);
+            let input_handler = usb_serial_input_handler(&mut receiver);
+            join!(flusher, input_handler);
+            /*let result = flusher.await;
             match result {
                 Ok(_) => (),
                 Err(_) => loop {
                     WANTED_LED_STATE.store(true, Ordering::Relaxed);
-                    Timer::after_millis(50).await;
+                    Timer::after_millis(125).await;
                     WANTED_LED_STATE.store(false, Ordering::Relaxed);
-                    Timer::after_millis(50).await;
+                    Timer::after_millis(125).await;
                 },
-            };
-            //let input_handler = usb_serial_input_handler(&mut acm);
-            //join!(flusher, input_handler);
-            //info!("Disconnected");
+            };*/
         }
     };
 
@@ -383,13 +385,13 @@ impl From<EndpointError> for Disconnected {
     }
 }
 
-async fn usb_serial_input_handler<'d, T: Instance + 'd>(acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
-        -> Result<(), Disconnected> {
+async fn usb_serial_input_handler<'d, T: Instance + 'd>(
+        receiver: &mut cdc_acm::Receiver<'d, Driver<'d, T>>) -> Result<(), Disconnected> {
     let mut buf = [0; 64];
     loop {
-        let n = acm.read_packet(&mut buf).await?;
+        let n = receiver.read_packet(&mut buf).await?;
         let data = &buf[..n];
-        //info!("data: {:x}", data);
-        acm.write_packet(data).await?;
+        info!("data: {:?}", data);
+        //acm.write_packet(data).await?;
     }
 }
