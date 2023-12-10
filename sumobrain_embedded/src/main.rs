@@ -12,12 +12,6 @@ use nalgebra::{Vector2, Point2, Rotation2};
 use core::cell::RefCell;
 use core::ops::DerefMut;
 
-//use stm32f4xx_hal as hal;
-//use stm32f4xx_hal::{prelude::*, interrupt, gpio, otg_fs::{USB, UsbBus}};
-//use crate::hal::{pac, prelude::*};
-//use usb_device::{prelude::*};
-//use usbd_serial::{SerialPort, USB_CLASS_CDC};
-
 use cortex_m_rt::{entry, exception};
 use cortex_m::interrupt::{Mutex, CriticalSection};
 use embassy_stm32::Peripherals;
@@ -36,23 +30,6 @@ use embassy_usb::Builder;
 use futures::future::join;
 use futures::join;
 //use {defmt_rtt as _, panic_probe as _};
-
-/*static LED_PIN: Mutex<RefCell<Option<gpio::gpioa::PA8<gpio::Output<gpio::PushPull>>>>> =
-        Mutex::new(RefCell::new(None));
-static DEBUG_PIN: Mutex<RefCell<Option<gpio::gpiob::PB10<gpio::Output<gpio::PushPull>>>>> =
-        Mutex::new(RefCell::new(None));*/
-/*static GLOBAL_TIME_MS: Mutex<RefCell<u32>> = Mutex::new(RefCell::new(0));
-
-fn millis() -> u32 {
-    cortex_m::interrupt::free(|cs| {
-        *GLOBAL_TIME_MS.borrow(cs).borrow()
-    })
-}
-
-fn timestamp_age(t0: u32) -> u32 {
-    let t1 = millis();
-    t1 - t0
-}*/
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -169,11 +146,6 @@ async fn main(_spawner: Spawner) {
     }
     let p = embassy_stm32::init(config);
 
-    //info!("Hello World!");
-
-    //let dp = pac::Peripherals::take().unwrap();
-    //let mut cp = cortex_m::peripheral::Peripherals::take().unwrap();
-
     // I/O
 
     let mut led = Output::new(p.PA8, Level::High, Speed::Low);
@@ -187,68 +159,7 @@ async fn main(_spawner: Spawner) {
         DEBUG_PIN.borrow(cs).replace(Some(debug_pin));
     });*/
 
-    // System clock
-
-    /*let rcc = dp.RCC.constrain();
-    //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
-    //let clocks = rcc.cfgr.sysclk(168.MHz()).freeze();
-    // Results in about 39mA taken via USB with stlink not connected
-    // - Powering via stlink adds about 34mA
-    let clocks = rcc.cfgr
-        .use_hse(16.MHz()) // Use external crystal (HSE)
-        .hclk(168.MHz())
-        .pclk1(42.MHz())
-        .pclk2(84.MHz())
-        .sysclk(168.MHz()) // Set system clock (SYSCLK)
-        .freeze(); // Apply the configuration*/
-
-    // SysTick
-
-    /*let systick_interval_ms = 1;
-    //cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1);
-    // No idea what's going on, for some reason the value needs to be divided by
-    // 8 in order to get correct timing
-    cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms / 8 - 1);
-    cp.SYST.clear_current();
-    cp.SYST.enable_counter();
-    cp.SYST.enable_interrupt();*/
-
-    // Create a delay abstraction based on SysTick
-    /*let mut delay = cp.SYST.delay(&clocks);
-    loop {
-        delay.delay_us(500000_u32);
-        cortex_m::interrupt::free(|cs| {
-            if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
-                led.toggle();
-            }
-        });
-    }*/
-
     // USB
-
-    /*
-    let usb = USB {
-        usb_global: dp.OTG_FS_GLOBAL,
-        usb_device: dp.OTG_FS_DEVICE,
-        usb_pwrclk: dp.OTG_FS_PWRCLK,
-        pin_dm: gpioa.pa11,
-        pin_dp: gpioa.pa12,
-    };
-    let usb_bus = UsbBus::new(usb);
-
-    let mut serial = SerialPort::new(&usb_bus);
-
-    // Use https://pid.codes/1209/0001/
-    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1209, 0x0001))
-        .device_class(USB_CLASS_CDC)
-        .strings(&[
-            StringDescriptors::new(usb_device::descriptor::lang_id::LangID::EN)
-                .manufacturer("8Dromeda Productions")
-                .product("Taliaivo v1 (2023)")
-                .serial_number("NO_SERIAL")
-        ]).unwrap()
-        .build();
-    */
 
     // Create the driver, from the HAL.
     let mut ep_out_buffer = [0u8; 256];
@@ -328,22 +239,6 @@ async fn main(_spawner: Spawner) {
             //info!("low");
             led.set_low();
             Timer::after_millis(300).await;
-
-            /*cortex_m::interrupt::free(|cs| {
-                if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
-                    debug_pin.toggle();
-                }
-            });*/
-
-            /*if timestamp_age(last_led_toggle_timestamp) >= 500 {
-                last_led_toggle_timestamp = millis();
-
-                cortex_m::interrupt::free(|cs| {
-                    if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
-                        led.toggle();
-                    }
-                });
-            }*/
         }
     };
 
@@ -351,20 +246,6 @@ async fn main(_spawner: Spawner) {
     // If we had made everything `'static` above instead, we could do this using separate tasks instead.
     join!(usb_fut, acm_fut, main_fut);
 }
-
-/*#[exception]
-fn SysTick() {
-    cortex_m::interrupt::free(|cs| {
-        /*if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
-            led.toggle();
-        }*/
-        /*if let Some(ref mut debug_pin) = DEBUG_PIN.borrow(cs).borrow_mut().deref_mut() {
-            debug_pin.toggle();
-        }*/
-        let mut global_time_ms = GLOBAL_TIME_MS.borrow(cs).borrow_mut();
-        *global_time_ms += 1;
-    });
-}*/
 
 struct Disconnected {}
 
