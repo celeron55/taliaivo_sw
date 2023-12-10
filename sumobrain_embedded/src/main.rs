@@ -4,10 +4,13 @@
 #![no_std]
 
 use stm32f4xx_hal as hal;
-use stm32f4xx_hal::{prelude::*, interrupt, gpio};
+use stm32f4xx_hal::{prelude::*, interrupt, gpio, otg_fs::{USB, UsbBus}};
 use cortex_m_rt::{entry, exception};
 use cortex_m::interrupt::{Mutex, CriticalSection};
 use crate::hal::{pac, prelude::*};
+use usb_device::{prelude::*};
+use usbd_serial::{SerialPort, USB_CLASS_CDC};
+
 use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::cell::RefCell;
@@ -128,8 +131,10 @@ fn main() -> ! {
     let dp = pac::Peripherals::take().unwrap();
     let mut cp = cortex_m::peripheral::Peripherals::take().unwrap();
 
-    // Set up i/o
-    let mut led_pin = dp.GPIOA.split().pa8.into_push_pull_output();
+    // I/O
+
+    let gpioa = dp.GPIOA.split();
+    let mut led_pin = gpioa.pa8.into_push_pull_output();
     led_pin.set_high();
     let mut debug_pin = dp.GPIOB.split().pb10.into_push_pull_output();
     cortex_m::interrupt::free(|cs| {
@@ -137,7 +142,8 @@ fn main() -> ! {
         DEBUG_PIN.borrow(cs).replace(Some(debug_pin));
     });
 
-    // Configure system clock
+    // System clock
+
     let rcc = dp.RCC.constrain();
     //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
     //let clocks = rcc.cfgr.sysclk(168.MHz()).freeze();
@@ -151,7 +157,8 @@ fn main() -> ! {
         .sysclk(168.MHz()) // Set system clock (SYSCLK)
         .freeze(); // Apply the configuration
 
-    // Set up 1ms SysTick
+    // SysTick
+
     let systick_interval_ms = 1;
     //cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1);
     // No idea what's going on, for some reason the value needs to be divided by
@@ -171,6 +178,33 @@ fn main() -> ! {
             }
         });
     }*/
+
+    // USB
+
+    let gpioa = dp.GPIOA.split();
+    let usb = USB {
+        usb_global: dp.OTG_FS_GLOBAL,
+        usb_device: dp.OTG_FS_DEVICE,
+        usb_pwrclk: dp.OTG_FS_PWRCLK,
+        pin_dm: gpioa.pa11,
+        pin_dp: gpioa.pa12,
+    };
+    let usb_bus = UsbBus::new(usb);
+
+    let mut serial = SerialPort::new(&usb_bus);
+
+    // Use https://pid.codes/1209/0001/
+    let mut usb_dev = UsbDeviceBuilder::new(&usb_bus, UsbVidPid(0x1209, 0x0001))
+        .device_class(USB_CLASS_CDC)
+        .strings(&[
+            StringDescriptors::new(usb_device::descriptor::lang_id::LangID::EN)
+                .manufacturer("8Dromeda Productions")
+                .product("Taliaivo v1 (2023)")
+                .serial_number("NO_SERIAL")
+        ]).unwrap()
+        .build();
+
+    // Main loop
 
     let mut last_led_toggle_timestamp = millis();
 

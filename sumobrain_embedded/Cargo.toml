@@ -13,9 +13,6 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 arrayvec = { version = "0.7.4", default-features = false, features = [] }
 nalgebra = { version = "0.32.3", default-features = false, features = [ "libm" ] }
-
-[dependencies.stm32f4xx-hal]
-version = "0.17.1"
-#features = ["stm32f407", "defmt"] # Adjust for your microcontroller model
-features = ["stm32f407"]
-
+usb-device = "0.3.1"
+usbd-serial = "0.2.0"
+stm32f4xx-hal = { version = "0.17.1", features = ["stm32f407", "rt", "usb_fs"] }
