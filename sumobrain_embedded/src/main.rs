@@ -139,6 +139,9 @@ impl UsbLogger {
             &self, acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
             -> Result<(), Disconnected> {
         // TODO: Remove
+        // NOTE: For some reason acm.write_packet() doesn't write anything
+        //       unless we read something first. At one time, in a debugger, it
+        //       suddenly started working without read_packet though.
         WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
         let mut buf = [0; 64];
         let n = acm.read_packet(&mut buf).await?;
