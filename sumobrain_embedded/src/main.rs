@@ -292,6 +292,7 @@ async fn main(spawner: Spawner) {
     let mut acm = CdcAcmClass::new(&mut builder, &mut state, 64);
 
     let (mut sender, mut receiver) = acm.split();
+    //let (mut sender, mut receiver, mut control) = acm.split_with_control();
 
     // Build the builder.
     let mut usb = builder.build();
@@ -300,7 +301,7 @@ async fn main(spawner: Spawner) {
     let usb_fut = usb.run();
 
     // Handle the ACM class
-    let acm_fut = async {
+    let acm_sender_fut = async {
         loop {
             sender.wait_connection().await;
             let flusher = flush_log_to_usb(&mut sender);
@@ -347,7 +348,7 @@ async fn main(spawner: Spawner) {
 
     // Run everything concurrently.
     // If we had made everything `'static` above instead, we could do this using separate tasks instead.
-    join!(usb_fut, acm_fut, main_fut);
+    join!(usb_fut, acm_sender_fut, main_fut);
 }
 
 #[embassy_executor::task]
