@@ -8,20 +8,23 @@ runner = "probe-rs run --chip STM32F407VETx"
 # runner = "gdb-multiarch -q -x openocd.gdb"
 
 rustflags = [
-  # Previously, the linker arguments --nmagic and -Tlink.x were set here.
-  # They are now set by build.rs instead. The linker argument can still
-  # only be set here, if a custom linker is needed.
+	# Previously, the linker arguments --nmagic and -Tlink.x were set here.
+	# They are now set by build.rs instead. The linker argument can still
+	# only be set here, if a custom linker is needed.
 
-  # By default, the LLD linker is used, which is shipped with the Rust
-  # toolchain. If you run into problems with LLD, you can switch to the
-  # GNU linker by uncommenting this line:
-  # "-C", "linker=arm-none-eabi-ld",
+	# By default, the LLD linker is used, which is shipped with the Rust
+	# toolchain. If you run into problems with LLD, you can switch to the
+	# GNU linker by uncommenting this line:
+	# "-C", "linker=arm-none-eabi-ld",
 
-  # If you need to link to pre-compiled C libraries provided by a C toolchain
-  # use GCC as the linker by uncommenting the three lines below:
-  # "-C", "linker=arm-none-eabi-gcc",
-  # "-C", "link-arg=-Wl,-Tlink.x",
-  # "-C", "link-arg=-nostartfiles",
+	# If you need to link to pre-compiled C libraries provided by a C toolchain
+	# use GCC as the linker by uncommenting the three lines below:
+	# "-C", "linker=arm-none-eabi-gcc",
+	# "-C", "link-arg=-Wl,-Tlink.x",
+	# "-C", "link-arg=-nostartfiles",
+
+	# Attempt to make debuggable release binaries
+	"-g",
 ]
 
 [build]

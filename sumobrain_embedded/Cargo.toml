@@ -41,12 +41,8 @@ embedded-storage = "0.3.1"
 micromath = "2.0.0"
 static_cell = { version = "2", features = ["nightly"]}
 chrono = { version = "^0.4", default-features = false}
+log = { version = "0.4" }
+once_cell = { version = "1.19.0", default-features = false, features = ["race"] }
 
 # Can't be used with embassy-stm32
 # stm32f4xx-hal = { version = "0.17.1", features = ["stm32f407", "rt", "usb_fs"] }
-
-[profile.release]
-debug = 2
-# codegen-units = 1 # better optimizations
-# debug = true # symbols are nice and they don't increase the size on Flash
-# lto = true # better optimizations

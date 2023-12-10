@@ -7,19 +7,21 @@
 use sumobrain_common::{RobotInterface, BrainState, Map};
 use sumobrain_common::map::HoughLine;
 
-use arrayvec::ArrayVec;
+use arrayvec::{ArrayVec, ArrayString};
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::cell::RefCell;
 use core::ops::DerefMut;
+use core::fmt::Write; // For ArrayString
+use core::borrow::BorrowMut;
+use core::sync::atomic::{Ordering, AtomicU32, AtomicBool};
 
 use cortex_m_rt::{entry, exception};
 use cortex_m::interrupt::{Mutex, CriticalSection};
 use embassy_stm32::Peripherals;
-use core::sync::atomic::{AtomicU32, Ordering};
-//use defmt::{panic, *};
 use embassy_executor::Spawner;
 use embassy_stm32::exti::ExtiInput;
-use embassy_stm32::gpio::{AnyPin, Input, Level, Output, Pin, Pull, Speed};
+use embassy_stm32::gpio::{AnyPin, Input, Output, Pin, Pull, Speed};
+use embassy_stm32::gpio;
 use embassy_stm32::time::Hertz;
 use embassy_stm32::usb_otg::{Driver, Instance};
 use embassy_stm32::{bind_interrupts, peripherals, usb_otg, Config};
@@ -29,7 +31,13 @@ use embassy_usb::driver::EndpointError;
 use embassy_usb::Builder;
 use futures::future::join;
 use futures::join;
+use log;
+use log::{Record, Metadata, Log, info, warn};
+use once_cell::race::OnceRef;
+//use defmt::{panic, *};
 //use {defmt_rtt as _, panic_probe as _};
+
+static WANTED_LED_STATE: AtomicBool = AtomicBool::new(true);
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -122,8 +130,93 @@ impl RobotInterface for Robot {
     }
 }
 
+struct UsbLogger {
+    buffer: Mutex<RefCell<Option<ArrayString<1024>>>>,
+}
+
+impl UsbLogger {
+    async fn flush_to_usb<'d, T: embassy_stm32::usb_otg::Instance>(
+            &self, acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
+            -> Result<(), Disconnected> {
+        // TODO: Remove
+        WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
+        let mut buf = [0; 64];
+        let n = acm.read_packet(&mut buf).await?;
+        acm.write_packet("foo\r\n".as_bytes()).await?;
+        return Ok(());
+
+        //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
+        let mut buf2: Option<ArrayString<1024>> = Some(ArrayString::new());
+        cortex_m::interrupt::free(|cs| {
+            // This replaces the logger buffer with an empty one, and we get the
+            // possibly filled in one
+            buf2 = self.buffer.borrow(cs).replace(buf2);
+            /*if let Some(ref mut buffer) = self.buffer.borrow(cs).borrow_mut().deref_mut() {
+                if !buffer.is_empty() {
+                    //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
+                    // Write the buffer contents to the USB CDC and clear the buffer
+                    acm.write_packet(buffer.as_bytes());
+                    buffer.clear();
+                }
+            }*/
+        });
+        if let Some(ref mut buffer) = buf2 {
+            if !buffer.is_empty() {
+                WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
+                // Write the buffer contents to the USB CDC and clear the buffer
+                acm.write_packet(buffer.as_bytes()).await?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Log for UsbLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= log::Level::Info // Adjust as needed
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            cortex_m::interrupt::free(|cs| { 
+                if let Some(ref mut buffer) = self.buffer.borrow(cs).borrow_mut().deref_mut() {
+                    let _ = writeln!(buffer, "[{}] {}", record.level(), record.args());
+                }
+            });
+        }
+    }
+
+    fn flush(&self) {
+        // Flushing might be handled asynchronously elsewhere
+    }
+}
+
+static LOGGER: UsbLogger = UsbLogger {
+    buffer: Mutex::new(RefCell::new(None)),
+};
+
+// Function to initialize the logger
+fn init_logger() {
+    cortex_m::interrupt::free(|cs| {
+        LOGGER.buffer.borrow(cs).replace(Some(ArrayString::new()));
+    });
+    log::set_logger(&LOGGER).unwrap();
+    log::set_max_level(log::LevelFilter::Info); // TODO: Adjust
+}
+
+async fn flush_log_to_usb<'d, T: Instance + 'd>(acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
+        -> Result<(), Disconnected> {
+    loop {
+        LOGGER.flush_to_usb(acm).await?;
+        // TODO: Adjust delay
+        Timer::after_millis(20).await;
+    }
+}
+
 #[embassy_executor::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
+    // System clock
+
     let mut config = Config::default();
     {
         use embassy_stm32::rcc::*;
@@ -146,9 +239,13 @@ async fn main(_spawner: Spawner) {
     }
     let p = embassy_stm32::init(config);
 
+    // Utilities
+
+    init_logger();
+
     // I/O
 
-    let mut led = Output::new(p.PA8, Level::High, Speed::Low);
+    //let mut led = Output::new(p.PA8, gpio::Level::High, Speed::Low);
 
     /*let gpioa = dp.GPIOA.split();
     let mut led_pin = gpioa.pa8.into_push_pull_output();
@@ -158,6 +255,10 @@ async fn main(_spawner: Spawner) {
         LED_PIN.borrow(cs).replace(Some(led_pin));
         DEBUG_PIN.borrow(cs).replace(Some(debug_pin));
     });*/
+
+    // LED
+
+    spawner.spawn(led_task(p.PA8.degrade())).unwrap();
 
     // USB
 
@@ -213,38 +314,59 @@ async fn main(_spawner: Spawner) {
     // Handle the ACM class
     let acm_fut = async {
         loop {
+            // TODO
             acm.wait_connection().await;
             //info!("Connected");
-            let _ = echo(&mut acm).await;
-            // TODO
+            let flusher = flush_log_to_usb(&mut acm);
+            let result = flusher.await;
+            match result {
+                Ok(_) => (),
+                Err(_) => loop {
+                    WANTED_LED_STATE.store(true, Ordering::Relaxed);
+                    Timer::after_millis(50).await;
+                    WANTED_LED_STATE.store(false, Ordering::Relaxed);
+                    Timer::after_millis(50).await;
+                },
+            };
+            //let input_handler = usb_serial_input_handler(&mut acm);
+            //join!(flusher, input_handler);
             //info!("Disconnected");
         }
     };
 
     // Main loop
 
-    let mut brain = BrainState::new(0);
-    let mut robot: Robot = Robot::new();
-
-    //let mut last_led_toggle_timestamp = millis();
+    //let mut brain = BrainState::new(0);
+    //let mut robot: Robot = Robot::new();
 
     let main_fut = async {
-        loop {
-            brain.update(&mut robot);
+        /*loop {
+            //brain.update(&mut robot);
 
-            //info!("high");
-            led.set_high();
+            info!("high");
+            //WANTED_LED_STATE.store(true, Ordering::Relaxed);
             Timer::after_millis(300).await;
 
-            //info!("low");
-            led.set_low();
+            info!("low");
+            //WANTED_LED_STATE.store(false, Ordering::Relaxed);
             Timer::after_millis(300).await;
-        }
+        }*/
     };
 
     // Run everything concurrently.
     // If we had made everything `'static` above instead, we could do this using separate tasks instead.
     join!(usb_fut, acm_fut, main_fut);
+}
+
+#[embassy_executor::task]
+async fn led_task(pin: AnyPin) {
+    let mut led = Output::new(pin, gpio::Level::Low, Speed::Low);
+
+    loop {
+        let wanted_state = WANTED_LED_STATE.load(Ordering::Relaxed);
+        led.set_level(wanted_state.into());
+        Timer::after_millis(10).await;
+    }
 }
 
 struct Disconnected {}
@@ -258,12 +380,13 @@ impl From<EndpointError> for Disconnected {
     }
 }
 
-async fn echo<'d, T: Instance + 'd>(class: &mut CdcAcmClass<'d, Driver<'d, T>>) -> Result<(), Disconnected> {
+async fn usb_serial_input_handler<'d, T: Instance + 'd>(acm: &mut CdcAcmClass<'d, Driver<'d, T>>)
+        -> Result<(), Disconnected> {
     let mut buf = [0; 64];
     loop {
-        let n = class.read_packet(&mut buf).await?;
+        let n = acm.read_packet(&mut buf).await?;
         let data = &buf[..n];
         //info!("data: {:x}", data);
-        class.write_packet(data).await?;
+        acm.write_packet(data).await?;
     }
 }
