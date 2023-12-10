@@ -32,6 +32,12 @@ $ ./build_release.sh && ./flash_release.sh
 This also kind of works, but RTT logging is not set up so it will complain after flashing succeeds:
 $ cargo run --release
 
+Monitoring using USB serial
+---------------------------
+Pressing a key after running the command starts USB logging
+$ picocom --baud 115200 -r -l -c -e x /dev/ttyACM0
+$ while true; do picocom --baud 115200 -r -l -c -e x /dev/ttyACM0; sleep 1; done
+
 Debugging on physical hardware
 ------------------------------
 $ cd sumobrain_embedded

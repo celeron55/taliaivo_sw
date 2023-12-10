@@ -50,13 +50,16 @@ bind_interrupts!(struct Irqs {
     OTG_FS => usb_otg::InterruptHandler<peripherals::USB_OTG_FS>;
 });
 
-// TODO: Implement
 struct Robot {
+    wheel_speed_left: f32,
+    wheel_speed_right: f32,
 }
 
 impl Robot {
     fn new() -> Self {
         Robot {
+            wheel_speed_left: 0.0,
+            wheel_speed_right: 0.0,
         }
     }
 }
@@ -69,7 +72,8 @@ impl RobotInterface for Robot {
 
     // Motor control
     fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32) {
-        // TODO
+        self.wheel_speed_left = left_speed_cm_s;
+        self.wheel_speed_right = right_speed_cm_s;
     }
 
     // Weapon control
@@ -330,7 +334,9 @@ async fn main(spawner: Spawner) {
 
     let main_fut = async {
         loop {
-            //brain.update(&mut robot);
+            brain.update(&mut robot);
+
+            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
             info!("high");
             WANTED_LED_STATE.store(true, Ordering::Relaxed);
