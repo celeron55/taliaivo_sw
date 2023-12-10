@@ -382,14 +382,6 @@ async fn background_processing_task() {
         ticker.next().await;
 
         WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle LED
-
-        /*info!("high");
-        WANTED_LED_STATE.store(true, Ordering::Relaxed);
-        Timer::after_millis(500).await;
-
-        info!("low");
-        WANTED_LED_STATE.store(false, Ordering::Relaxed);
-        Timer::after_millis(500).await;*/
     }
 }
 
