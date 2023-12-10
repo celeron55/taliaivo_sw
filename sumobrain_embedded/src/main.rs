@@ -371,6 +371,9 @@ async fn background_processing_task() {
     loop {
         brain.update(&mut robot);
 
+        //cortex_m::asm::delay(16_000_000);
+        //robot.wheel_speed_right += 1.0;
+
         info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
         // Make sure other tasks get at least some time
