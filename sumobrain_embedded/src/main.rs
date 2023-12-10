@@ -39,6 +39,7 @@ use once_cell::race::OnceRef;
 //use {defmt_rtt as _, panic_probe as _};
 
 static WANTED_LED_STATE: AtomicBool = AtomicBool::new(true);
+static USB_LOGGING_STARTED: AtomicBool = AtomicBool::new(false);
 
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
@@ -146,7 +147,7 @@ impl UsbLogger {
             buf2 = self.buffer.borrow(cs).replace(buf2);
         });
         if let Some(ref mut buffer) = buf2 {
-            if !buffer.is_empty() {
+            if !buffer.is_empty() && USB_LOGGING_STARTED.load(Ordering::Relaxed) {
                 // Toggle LED
                 //WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle
                 // Write the buffer contents to the USB CDC and clear the buffer
@@ -310,6 +311,9 @@ async fn main(spawner: Spawner) {
             match flusher_result {
                 Ok(_) => (),
                 Err(_) => loop {
+                    // TODO: Instead of this loop, stop USB logging and
+                    //       reset USB in such a way that a new connection can
+                    //       be made
                     WANTED_LED_STATE.store(true, Ordering::Relaxed);
                     Timer::after_millis(125).await;
                     WANTED_LED_STATE.store(false, Ordering::Relaxed);
@@ -325,14 +329,6 @@ async fn main(spawner: Spawner) {
     let mut robot: Robot = Robot::new();
 
     let main_fut = async {
-        // For some reason a bit of delay is needed, otherwise immediate logging
-        // will permanently stop USB CDC operation
-        // NOTE: 500ms is not enough, 1000ms is sometimes enough
-        // NOTE: Maybe this delay has to be long enough to wait until a terminal
-        //       has been opened on the host. That would mean this is possibly a
-        //       workaround for something.
-        Timer::after_millis(2000).await;
-
         loop {
             //brain.update(&mut robot);
 
@@ -369,6 +365,11 @@ async fn usb_serial_input_handler<'d, T: Instance + 'd>(
         let n = receiver.read_packet(&mut buf).await?;
         let data = &buf[..n];
         info!("data: {:?}", data);
-        //acm.write_packet(data).await?;
+        // Any received data starts USB logging
+        USB_LOGGING_STARTED.store(true, Ordering::Relaxed);
+        // Some commands could be handled like this, altough buffering should be
+        // added
+        /*if data.len() >= 1 && data[0] == b'a' {
+        }*/
     }
 }
