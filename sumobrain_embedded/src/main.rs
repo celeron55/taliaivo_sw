@@ -130,6 +130,7 @@ fn main() -> ! {
 
     // Set up i/o
     let mut led_pin = dp.GPIOA.split().pa8.into_push_pull_output();
+    led_pin.set_high();
     let mut debug_pin = dp.GPIOB.split().pb10.into_push_pull_output();
     cortex_m::interrupt::free(|cs| {
         LED_PIN.borrow(cs).replace(Some(led_pin));
@@ -140,6 +141,8 @@ fn main() -> ! {
     let rcc = dp.RCC.constrain();
     //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
     //let clocks = rcc.cfgr.sysclk(168.MHz()).freeze();
+    // Results in about 39mA taken via USB with stlink not connected
+    // - Powering via stlink adds about 34mA
     let clocks = rcc.cfgr
         .use_hse(16.MHz()) // Use external crystal (HSE)
         .hclk(168.MHz())
@@ -147,15 +150,12 @@ fn main() -> ! {
         .pclk2(84.MHz())
         .sysclk(168.MHz()) // Set system clock (SYSCLK)
         .freeze(); // Apply the configuration
-    /*let clocks = rcc.cfgr
-        .use_hse(16.MHz()) // Use external crystal (HSE)
-        .sysclk(96.MHz()) // Set system clock (SYSCLK)
-        .freeze(); // Apply the configuration*/
 
     // Set up 1ms SysTick
     let systick_interval_ms = 1;
     //cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1);
-    // No idea what's going on
+    // No idea what's going on, for some reason the value needs to be divided by
+    // 8 in order to get correct timing
     cp.SYST.set_reload(clocks.sysclk().to_Hz() / 1000 * systick_interval_ms / 8 - 1);
     cp.SYST.clear_current();
     cp.SYST.enable_counter();
@@ -171,12 +171,6 @@ fn main() -> ! {
             }
         });
     }*/
-
-    /*cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut led) = LED_PIN.borrow(cs).borrow_mut().deref_mut() {
-            led.set_high();
-        }
-    });*/
 
     let mut last_led_toggle_timestamp = millis();
 
