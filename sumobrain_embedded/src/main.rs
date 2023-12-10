@@ -138,7 +138,7 @@ struct UsbLogger {
 impl UsbLogger {
     async fn flush_to_usb<'d, T: embassy_stm32::usb_otg::Instance>(
             &self, sender: &mut cdc_acm::Sender<'d, Driver<'d, T>>)
-            -> Result<(), Disconnected> {
+            -> Result<(), EndpointError> {
         let mut buf2: Option<ArrayString<1024>> = Some(ArrayString::new());
         cortex_m::interrupt::free(|cs| {
             // This replaces the logger buffer with an empty one, and we get the
@@ -191,7 +191,7 @@ fn init_logger() {
 }
 
 async fn flush_log_to_usb<'d, T: Instance + 'd>(sender: &mut cdc_acm::Sender<'d, Driver<'d, T>>)
-        -> Result<(), Disconnected> {
+        -> Result<(), EndpointError> {
     loop {
         LOGGER.flush_to_usb(sender).await?;
         // TODO: Adjust delay
@@ -337,11 +337,11 @@ async fn main(spawner: Spawner) {
 
             info!("high");
             WANTED_LED_STATE.store(true, Ordering::Relaxed);
-            Timer::after_millis(300).await;
+            Timer::after_millis(500).await;
 
             info!("low");
             WANTED_LED_STATE.store(false, Ordering::Relaxed);
-            Timer::after_millis(300).await;
+            Timer::after_millis(500).await;
         }
     };
 
@@ -361,19 +361,8 @@ async fn led_task(pin: AnyPin) {
     }
 }
 
-struct Disconnected {}
-
-impl From<EndpointError> for Disconnected {
-    fn from(val: EndpointError) -> Self {
-        match val {
-            EndpointError::BufferOverflow => panic!("Buffer overflow"),
-            EndpointError::Disabled => Disconnected {},
-        }
-    }
-}
-
 async fn usb_serial_input_handler<'d, T: Instance + 'd>(
-        receiver: &mut cdc_acm::Receiver<'d, Driver<'d, T>>) -> Result<(), Disconnected> {
+        receiver: &mut cdc_acm::Receiver<'d, Driver<'d, T>>) -> Result<(), EndpointError> {
     let mut buf = [0; 64];
     loop {
         let n = receiver.read_packet(&mut buf).await?;
