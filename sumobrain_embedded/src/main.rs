@@ -14,11 +14,14 @@ use core::ops::DerefMut;
 use core::fmt::Write; // For ArrayString
 use core::borrow::BorrowMut;
 use core::sync::atomic::{Ordering, AtomicU32, AtomicBool};
+use static_cell::StaticCell;
 
 use cortex_m_rt::{entry, exception};
 use cortex_m::interrupt::{Mutex, CriticalSection};
 use embassy_stm32::Peripherals;
-use embassy_executor::Spawner;
+use embassy_executor::{Spawner, Executor, InterruptExecutor};
+use embassy_stm32::interrupt;
+use embassy_stm32::interrupt::{InterruptExt, Priority};
 use embassy_stm32::exti::ExtiInput;
 use embassy_stm32::gpio::{AnyPin, Input, Output, Pin, Pull, Speed};
 use embassy_stm32::gpio;
@@ -204,6 +207,17 @@ async fn flush_log_to_usb<'d, T: Instance + 'd>(sender: &mut cdc_acm::Sender<'d,
     }
 }
 
+static EXECUTOR_HIGH: InterruptExecutor = InterruptExecutor::new();
+static EXECUTOR_LOW: StaticCell<Executor> = StaticCell::new();
+
+#[interrupt]
+unsafe fn UART4() {
+    EXECUTOR_HIGH.on_interrupt()
+}
+
+// TODO: Figure out how to make this work without a global static
+static mut EP_OUT_BUFFER: [u8; 256] = [0u8; 256];
+
 #[embassy_executor::main]
 async fn main(spawner: Spawner) {
     // System clock
@@ -245,19 +259,35 @@ async fn main(spawner: Spawner) {
         DEBUG_PIN.borrow(cs).replace(Some(debug_pin));
     });*/
 
-    // LED
-
-    spawner.spawn(led_task(p.PA8.degrade())).unwrap();
-
     // USB
 
     // Create the driver, from the HAL.
-    let mut ep_out_buffer = [0u8; 256];
     let mut config = embassy_stm32::usb_otg::Config::default();
     // NOTE: For this, VBUS would have to be connected to PA9
     //config.vbus_detection = true;
     config.vbus_detection = false;
-    let driver = Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, &mut ep_out_buffer, config);
+    let driver = unsafe {
+        // TODO: Figure out how to make this work without unsafe
+        Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, &mut EP_OUT_BUFFER, config)
+    };
+
+    // Executors and tasks
+
+    // High-priority executor: UART4, priority level 6
+    interrupt::UART4.set_priority(Priority::P6);
+    let spawner = EXECUTOR_HIGH.start(interrupt::UART4);
+    spawner.spawn(led_task(p.PA8.degrade())).unwrap();
+    spawner.spawn(usb_task(driver)).unwrap();
+
+    // Low priority executor: runs in thread mode, using WFE/SEV
+    let executor = EXECUTOR_LOW.init(Executor::new());
+    executor.run(|spawner| {
+        spawner.spawn(background_processing_task()).unwrap();
+    }); 
+}
+
+#[embassy_executor::task]
+async fn usb_task(mut driver: Driver<'static, embassy_stm32::peripherals::USB_OTG_FS>) {
 
     // Create embassy-usb Config
     let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
@@ -325,37 +355,39 @@ async fn main(spawner: Spawner) {
         }
     };
 
-    // Main loop
+    // Run everything concurrently.
+    // If we had made everything `'static` above instead, we could do this using
+    // separate tasks instead.
+    join!(usb_fut, acm_sender_fut);
+}
 
+#[embassy_executor::task]
+async fn background_processing_task() {
     let mut brain = BrainState::new(0);
     let mut robot: Robot = Robot::new();
 
-    let main_fut = async {
-        let interval_us = 1000000 / sumobrain_common::UPS as u64;
-        let mut ticker = Ticker::every(Duration::from_micros(interval_us));
-        loop {
-            brain.update(&mut robot);
+    let interval_us = 1000000 / sumobrain_common::UPS as u64;
+    let mut ticker = Ticker::every(Duration::from_micros(interval_us));
+    loop {
+        brain.update(&mut robot);
 
-            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+        info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
-            // Make sure other tasks get at least some time
-            Timer::after_millis(1).await;
+        // Make sure other tasks get at least some time
+        //Timer::after_millis(1).await;
 
-            ticker.next().await;
+        ticker.next().await;
 
-            /*info!("high");
-            WANTED_LED_STATE.store(true, Ordering::Relaxed);
-            Timer::after_millis(500).await;
+        WANTED_LED_STATE.fetch_xor(true, Ordering::Relaxed); // Toggle LED
 
-            info!("low");
-            WANTED_LED_STATE.store(false, Ordering::Relaxed);
-            Timer::after_millis(500).await;*/
-        }
-    };
+        /*info!("high");
+        WANTED_LED_STATE.store(true, Ordering::Relaxed);
+        Timer::after_millis(500).await;
 
-    // Run everything concurrently.
-    // If we had made everything `'static` above instead, we could do this using separate tasks instead.
-    join!(usb_fut, acm_sender_fut, main_fut);
+        info!("low");
+        WANTED_LED_STATE.store(false, Ordering::Relaxed);
+        Timer::after_millis(500).await;*/
+    }
 }
 
 #[embassy_executor::task]
