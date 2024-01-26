@@ -264,8 +264,8 @@ async fn main(spawner: Spawner) {
     // Create the driver, from the HAL.
     let mut config = embassy_stm32::usb_otg::Config::default();
     // NOTE: For this, VBUS would have to be connected to PA9
-    //config.vbus_detection = true;
-    config.vbus_detection = false;
+    config.vbus_detection = true;
+    //config.vbus_detection = false;
     let driver = unsafe {
         // TODO: Figure out how to make this work without unsafe
         Driver::new_fs(p.USB_OTG_FS, Irqs, p.PA12, p.PA11, &mut EP_OUT_BUFFER, config)
