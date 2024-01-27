@@ -37,6 +37,7 @@ use core::fmt::Write; // For ArrayString
 //use log;
 use log::{Record, Metadata, Log, info, warn};
 use ringbuffer::{RingBuffer, ConstGenericRingBuffer};
+use core::f64::consts::PI;
 //use core::borrow::BorrowMut;
 //use core::sync::atomic::{Ordering, AtomicU32, AtomicBool};
 //use static_cell::StaticCell;
@@ -55,6 +56,7 @@ use command_accumulator::CommandAccumulator;
 struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
+    proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
 }
 
 impl Robot {
@@ -62,6 +64,7 @@ impl Robot {
         Robot {
             wheel_speed_left: 0.0,
             wheel_speed_right: 0.0,
+            proximity_sensor_readings: ArrayVec::new(),
         }
     }
 }
@@ -98,15 +101,7 @@ impl RobotInterface for Robot {
     }
     // Returns a list of (angle, distance (cm), something_seen) tuples for each sensor
     fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32, bool), 6> {
-        // TODO
-        let mut proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6> = ArrayVec::new();
-        proximity_sensor_readings.push((  0.0, 30.0, true));
-        proximity_sensor_readings.push((-45.0, 30.0, true));
-        proximity_sensor_readings.push(( 45.0, 30.0, true));
-        proximity_sensor_readings.push((-90.0, 30.0, true));
-        proximity_sensor_readings.push(( 90.0, 30.0, true));
-        proximity_sensor_readings.push((180.0, 30.0, true));
-        return proximity_sensor_readings;
+        return self.proximity_sensor_readings.clone();
     }
     // X, Y, Z axis values
     fn get_gyroscope_reading(&self) -> (f32, f32, f32) {
@@ -268,6 +263,7 @@ mod app {
         usb_dev: UsbDevice<'static, otg_fs::UsbBusType>,
         usb_serial: usbd_serial::SerialPort<'static, otg_fs::UsbBusType>,
         adc_transfer: AdcDmaTransfer,
+        adc_result: [u16; ADC_NUM_CHANNELS],
     }
 
     #[local]
@@ -454,6 +450,7 @@ mod app {
                 usb_dev: usb_dev,
                 usb_serial: usb_serial,
                 adc_transfer: adc_transfer,
+                adc_result: [0; ADC_NUM_CHANNELS],
             },
             Local {
                 led_pin: led_pin,
@@ -475,7 +472,7 @@ mod app {
     }
 
     #[task(priority = 1,
-        shared = [millis_counter, wanted_led_state, adc_transfer],
+        shared = [millis_counter, wanted_led_state, adc_transfer, adc_result],
         local = [motor_pwm]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
@@ -486,6 +483,31 @@ mod app {
         //let interval_ms = 1000;
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
+
+            robot.proximity_sensor_readings.clear();
+            cx.shared.adc_result.lock(|adc_result| {
+                // NOTE: The algorithm currently assumes sensors to be in this
+                //       exact order
+                let proximity_sensor_angles =
+                        [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+                // TODO: Check that there isn't a mixup between left and right
+                //       (currently it's assumed -90 = right)
+                let adc_indexes = [2, 1, 3, 0, 4, 5];
+                for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
+                    let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
+                    let raw = adc_result[adc_indexes[i]];
+                    let distance_cm = {
+                        if raw < 10 {
+                            1000.0
+                        } else {
+                            (4500.0 / raw as f32).max(5.5)
+                        }
+                    };
+                    let detected: bool = (distance_cm < 45.0);
+                    robot.proximity_sensor_readings.push(
+                            (angle_rad as f32, distance_cm, detected));
+                }
+            });
 
             brain.update(&mut robot);
 
@@ -639,14 +661,11 @@ mod app {
         });
     }
 
-    #[task(binds = DMA2_STREAM0, shared = [adc_transfer], local = [adc_buffer])]
-    fn adc_dma(cx: adc_dma::Context) {
-        let mut shared = cx.shared;
-        let local = cx.local;
-
-        let buffer = shared.adc_transfer.lock(|transfer| {
+    #[task(binds = DMA2_STREAM0, shared = [adc_transfer, adc_result], local = [adc_buffer])]
+    fn adc_dma(mut cx: adc_dma::Context) {
+        let buffer = cx.shared.adc_transfer.lock(|transfer| {
             let (buffer, _) = transfer
-                .next_transfer(local.adc_buffer.take().unwrap())
+                .next_transfer(cx.local.adc_buffer.take().unwrap())
                 .unwrap();
             buffer
         });
@@ -655,12 +674,15 @@ mod app {
         let result = buffer.clone();
 
         // Return buffer to resources pool for next transfer
-        *local.adc_buffer = Some(buffer);
+        *cx.local.adc_buffer = Some(buffer);
 
-        // Send over data to UART
-        info!("ADC result: {:?} {:?} {:?} {:?} {:?} {:?}",
+        cx.shared.adc_result.lock(|shared_result| {
+            *shared_result = result.clone();
+        });
+
+        /*info!("ADC result: {:?} {:?} {:?} {:?} {:?} {:?}",
                 result[0], result[1], result[2],
-                result[3], result[4], result[5]);
+                result[3], result[4], result[5]);*/
     }
 }
 
