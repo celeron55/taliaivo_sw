@@ -8,13 +8,21 @@
 use cortex_m;
 use cortex_m::interrupt::{Mutex, CriticalSection};
 //use cortex_m_rt::{entry, exception};
-use stm32f4xx_hal::gpio::{Output, PushPull, PA8};
-use stm32f4xx_hal::gpio;
-use stm32f4xx_hal::prelude::*;
-use stm32f4xx_hal::serial::{config::Config, Event, Serial};
-use stm32f4xx_hal::pac as pac;
-use stm32f4xx_hal::otg_fs;
 use stm32f4xx_hal as hal;
+use stm32f4xx_hal::{
+    gpio::{Output, PushPull, PA8},
+    gpio,
+    prelude::*,
+    serial::{config::Config, Event, Serial},
+    pac as pac,
+    otg_fs,
+    adc::{
+        config::{AdcConfig, Clock, Dma, Resolution, SampleTime, Scan, Sequence},
+        Adc,
+    },
+    dma::{config::DmaConfig, PeripheralToMemory, Stream0, StreamsTuple, Transfer},
+    pac::{ADC1, DMA2, TIM2, USART2},
+};
 use rtic::app;
 use rtic_monotonics::systick::*;
 use usb_device::{prelude::*};
@@ -204,17 +212,24 @@ fn init_logger() {
     log::set_max_level(log::LevelFilter::Info); // TODO: Adjust as needed
 }
 
+// ADC DMA
+
+type AdcDmaTransfer = Transfer<Stream0<DMA2>, 0, Adc<ADC1>, PeripheralToMemory,
+        &'static mut [u16; 2]>;
+
 // Motor control
+
+type MotorPwm = hal::timer::PwmHz<hal::pac::TIM4, (
+            hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false>,
+            hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false>,
+            hal::timer::ChannelBuilder<hal::pac::TIM4, 2, false>,
+            hal::timer::ChannelBuilder<hal::pac::TIM4, 3, false>
+        )>;
 
 fn set_motor_speeds(
     pwm_left: f32,
     pwm_right: f32,
-    motor_pwm: &mut hal::timer::PwmHz<hal::pac::TIM4, (
-        hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false>,
-        hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false>,
-        hal::timer::ChannelBuilder<hal::pac::TIM4, 2, false>,
-        hal::timer::ChannelBuilder<hal::pac::TIM4, 3, false>
-    )>
+    motor_pwm: &mut MotorPwm,
 ){
     // Motor A (connector J1) (right side; C1 > C2 = forward)
     if pwm_right >= 0.0 {
@@ -260,12 +275,7 @@ mod app {
         usart1_tx: stm32f4xx_hal::serial::Tx<stm32f4xx_hal::pac::USART1, u8>,
         usart1_txbuf: ConstGenericRingBuffer<u8, 1024>,
         command_accumulator: CommandAccumulator<50>,
-        motor_pwm: hal::timer::PwmHz<hal::pac::TIM4, (
-                    hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false>,
-                    hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false>,
-                    hal::timer::ChannelBuilder<hal::pac::TIM4, 2, false>,
-                    hal::timer::ChannelBuilder<hal::pac::TIM4, 3, false>
-                )>,
+        motor_pwm: MotorPwm,
     }
 
     #[init]
@@ -381,6 +391,10 @@ mod app {
                     .serial_number("1337")
             ]).unwrap()
             .build();
+
+        // ADC
+
+
 
         // Schedule tasks
 
