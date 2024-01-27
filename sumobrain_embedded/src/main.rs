@@ -4,8 +4,9 @@
 //#![deny(unsafe_code)]
 //#![allow(clippy::empty_loop)]
 
-//use cortex_m_rt::{entry, exception};
+use cortex_m;
 //use cortex_m::interrupt::{Mutex, CriticalSection};
+//use cortex_m_rt::{entry, exception};
 use stm32f4xx_hal::gpio::{Output, PushPull, PA8};
 use stm32f4xx_hal::prelude::*;
 use rtic::app;
@@ -178,13 +179,12 @@ mod app {
 
         // SysTick
 
-        let systick_mono_token = rtic_monotonics::create_systick_token!();
-        let systick_interval_ms = 1;
-        // No idea what's going on, for some reason the value needs to be divided by
-        // 8 in order to get correct timing (TODO, FIXME)
+        let systick_token = rtic_monotonics::create_systick_token!();
+        /*let systick_interval_ms = 1;
         Systick::start(cx.core.SYST,
-                clocks.sysclk().to_Hz() / 1000 * systick_interval_ms / 8 - 1,
-                systick_mono_token);
+                clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1,
+                systick_token);*/
+        Systick::start(cx.core.SYST, 168_000_000, systick_token);
 
         // I/O
 
@@ -206,6 +206,7 @@ mod app {
         // Schedule tasks
 
         led_task::spawn().ok();
+        algorithm_task::spawn().ok();
 
         // Initialize context
 
@@ -222,50 +223,61 @@ mod app {
         )
     }
 
-    /*#[idle(shared = [wanted_led_state], local = [])]
+    #[idle(shared = [wanted_led_state], local = [])]
     fn idle(mut cx: idle::Context) -> ! {
         loop {
-            // TODO: Enable
-            /*let mut brain = BrainState::new(0);
-            let mut robot: Robot = Robot::new();
-
-            let interval_us = 1000000 / sumobrain_common::UPS as u64;
-            // TODO: Interval timing
-            //let mut ticker = Ticker::every(Duration::from_micros(interval_us));
-            loop {
-                brain.update(&mut robot);
-
-                //cortex_m::asm::delay(16_000_000);
-                //robot.wheel_speed_right += 1.0;
-
-                info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
-
-                // Make sure other tasks get at least some time
-                //Timer::after_millis(1).await;
-
-                //ticker.next().await;
-
-                // Toggle LED for debugging
-                cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
-            }*/
+            cortex_m::asm::nop();
         }
-    }*/
+    }
 
-    //#[task(priority = 1, shared = [wanted_led_state], local = [led_pin, state])]
-    #[task(shared = [wanted_led_state], local = [led_pin, state])]
+    #[task(priority = 1, shared = [wanted_led_state], local = [])]
+    async fn algorithm_task(mut cx: algorithm_task::Context) {
+        loop {
+            // Toggle LED for debugging
+            cx.shared.wanted_led_state.lock(|value| { *value = !*value; *value });
+            //cx.shared.wanted_led_state.lock(|value| { *value = false; *value });
+            Systick::delay(500.millis()).await;
+        }
+
+        // TODO: Enable
+        /*let mut brain = BrainState::new(0);
+        let mut robot: Robot = Robot::new();
+
+        let interval_us = 1000000 / sumobrain_common::UPS as u64;
+        // TODO: Interval timing
+        //let mut ticker = Ticker::every(Duration::from_micros(interval_us));
+        loop {
+            brain.update(&mut robot);
+
+            //cortex_m::asm::delay(16_000_000);
+            //robot.wheel_speed_right += 1.0;
+
+            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+
+            // Make sure other tasks get at least some time
+            //Timer::after_millis(1).await;
+
+            //ticker.next().await;
+
+            // Toggle LED for debugging
+            cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+        }*/
+    }
+
+    #[task(priority = 2, shared = [wanted_led_state], local = [led_pin, state])]
     async fn led_task(mut cx: led_task::Context) {
         loop {
-            /*let wanted_state = cx.shared.wanted_led_state.lock(|value| {
+            let wanted_state = cx.shared.wanted_led_state.lock(|value| {
                 *value
             });
             cx.local.led_pin.set_state(wanted_state.into());
-            Systick::delay(10.millis()).await;*/
+            Systick::delay(5.millis()).await;
 
-            *cx.local.state = !*cx.local.state;
+            /*cx.local.state = !*cx.local.state;
             let wanted_state = *cx.local.state;
             cx.local.led_pin.set_state(wanted_state.into());
             //cortex_m::asm::delay(16_000_000); // Busywait
-            Systick::delay(500.millis()).await;
+            Systick::delay(500.millis()).await;*/
         }
     }
 }
