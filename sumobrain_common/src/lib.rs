@@ -22,8 +22,14 @@ const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
 // don't occur on an empty arena.
 const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
-const MAX_LINEAR_SPEED: f32 = 100.0;
-const MAX_ROTATION_SPEED: f32 = PI * 4.0;
+//const MAX_LINEAR_SPEED: f32 = 100.0;
+//const MAX_ROTATION_SPEED: f32 = PI * 4.0;
+//const SCANNING_ROTATION_SPEED: f32 = 1.5;
+//const SCANNING_FREQUENCY: f32 = 10.0;
+const MAX_LINEAR_SPEED: f32 = 20.0;
+const MAX_ROTATION_SPEED: f32 = PI * 2.0;
+const SCANNING_ROTATION_SPEED: f32 = 1.0;
+const SCANNING_FREQUENCY: f32 = 5.0;
 
 pub trait RobotInterface {
     // Capabilities and dimensions
@@ -420,7 +426,7 @@ impl BrainState {
             let _d5 = self.proximity_sensor_readings[5].1;
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
-            let mut safe_linear_speed = 100.0;
+            let mut safe_linear_speed = MAX_LINEAR_SPEED;
             let L = 30.0;
             let L2 = 20.0;
             if d0 < L {
@@ -550,7 +556,7 @@ impl BrainState {
                 wanted_linear_speed = max_linear_speed * 0.05;
             }
             // Apply motor speed modulation to get scanning data
-            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
@@ -655,14 +661,14 @@ impl BrainState {
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed, false);
             // Apply motor speed modulation to get scanning data
-            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 1.5;
+            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
         //let wanted_linear_speed = 100.0;
         //let wanted_rotation_speed = PI * 1.0;
         let wanted_linear_speed = 0.0;
-        let wanted_rotation_speed = PI * 3.0;
+        let wanted_rotation_speed = MAX_ROTATION_SPEED * 3.0 / 4.0;
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 
@@ -675,12 +681,12 @@ impl BrainState {
                     self.drive_towards_absolute_position(
                         target_p, max_linear_speed, max_rotation_speed, true);
         // If not much rotation is needed, use extra speed
-        if wanted_rotation_speed.abs() < PI * 2.0 {
+        if wanted_rotation_speed.abs() < PI * MAX_ROTATION_SPEED / 2.0 {
             wanted_linear_speed *= 1.5 + AGGRESSIVENESS * 0.5;
         }
         // Apply some motor speed modulation to get scanning data to help stay
         // on target
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * 10.0).sin() * 2.0;
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED * 2.0 / 1.5;
         // Revert linear speed at an interval to allow the weapon to spin up
         if self.attack_step_count > UPS * 2 &&
                 ((self.attack_step_count as u32) % (UPS * 4)) < (UPS as f32 * 0.3) as u32 {
