@@ -227,25 +227,26 @@ fn set_motor_speeds(
     pwm_right: f32,
     motor_pwm: &mut MotorPwm,
 ){
+    let max_pwm = 0.25;
     // Motor A (connector J1) (right side; C1 > C2 = forward)
     if pwm_right >= 0.0 {
         motor_pwm.set_duty(hal::timer::Channel::C1,
-                (motor_pwm.get_max_duty() as f32 * (pwm_right).min(1.0)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (pwm_right).min(max_pwm)) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C2, 0);
     } else {
         motor_pwm.set_duty(hal::timer::Channel::C1, 0);
         motor_pwm.set_duty(hal::timer::Channel::C2,
-                (motor_pwm.get_max_duty() as f32 * (-pwm_right).min(1.0)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (-pwm_right).min(max_pwm)) as u16);
     }
     // Motor B (connector J2) (left side; C3 > C4 = forward)
     if pwm_left >= 0.0 {
         motor_pwm.set_duty(hal::timer::Channel::C3,
-                (motor_pwm.get_max_duty() as f32 * (pwm_left).min(1.0)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (pwm_left).min(max_pwm)) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C4, 0);
     } else {
         motor_pwm.set_duty(hal::timer::Channel::C3, 0);
         motor_pwm.set_duty(hal::timer::Channel::C4,
-                (motor_pwm.get_max_duty() as f32 * (-pwm_left).min(1.0)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (-pwm_left).min(max_pwm)) as u16);
     }
 }
 
@@ -514,8 +515,8 @@ mod app {
             /*let motor_pwm_left = 0.1;
             let motor_pwm_right = 0.1;*/
             // TODO: Correct scaling
-            let motor_pwm_left = robot.wheel_speed_left * 0.002;
-            let motor_pwm_right = robot.wheel_speed_right * 0.002;
+            let motor_pwm_left = robot.wheel_speed_left * 0.020;
+            let motor_pwm_right = robot.wheel_speed_right * 0.020;
             set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
 
             //cortex_m::asm::delay(16_000_000);
