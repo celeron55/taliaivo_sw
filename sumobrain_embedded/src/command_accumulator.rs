@@ -30,6 +30,8 @@ impl<const BUF_LEN: usize> CommandAccumulator<BUF_LEN> {
             if self.buf.len() > 0 {
                 self.buf.truncate(self.buf.len() - 1)
             }
+        } else if self.buf.is_full() {
+            // Ignore character because buffer is full
         } else {
             self.buf.push(c);
         }

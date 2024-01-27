@@ -12,10 +12,10 @@ cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-sing
 stm32f4xx-hal = { version = "0.20.0", features = ["stm32f407", "rtic2", "usb_fs"] }
 embedded-hal = "1.0.0"
 #cortex-m-rtic = { version = "1.1.4" } # This is what you would use for RTIC 1.0/1.1
-rtic = { version = "2.0.1", features = ["thumbv7-backend"] } # ???
-#rtic = { version = "2.0.1" }
+rtic = { version = "2.0.1", features = ["thumbv7-backend"] }
 rtic-monotonics = { version = "1.5.0", features = ["cortex-m-systick"] }
-#rtic-sync = { version = "1.2.0" }
+usb-device = "0.3.1"
+usbd-serial = "0.2.0"
 
 # Generic embedded
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
@@ -41,5 +41,4 @@ nalgebra = { version = "0.32.3", default-features = false, features = [ "libm" ]
 #panic-probe = { version = "0.3", features = ["print-defmt"] }
 #panic-probe = { version = "0.3", features = [] }
 #nb = "1.0.0"
-#usb-device = "0.3.1"
-#usbd-serial = "0.2.0"
+#rtic-sync = { version = "1.2.0" }
