@@ -11,6 +11,7 @@ Manual fixes to be done on a fresh board:
 	* NOTE: There are multiple unused pins around pin 37, for example 35, 36,
 	  38, 39. For this reason you can solder bridge the neighboring pins and it
 	  does not hurt at all, which makes this modification very easy to make.
+3. Solder a jumper wire from C23 to C34 (VREF to 3.3V)
 
 Enabling the DFU:
 - Connect BOOT0 to 3.3V when powering up the board via USB. This should put the
