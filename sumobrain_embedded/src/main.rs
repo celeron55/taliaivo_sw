@@ -265,15 +265,15 @@ mod app {
 
         let mut debug_pin = cx.device.GPIOB.split().pb10.into_push_pull_output();
 
+        // Motor control
+
         let mut motor_a_enable_pin = gpiod.pd10.into_push_pull_output();
         let mut motor_b_enable_pin = gpiod.pd11.into_push_pull_output();
+        motor_a_enable_pin.set_high();
+        motor_b_enable_pin.set_high();
 
-        motor_a_enable_pin.set_low();
-        motor_b_enable_pin.set_low();
-
-        // NOTE: Motor A IN1,2 = TIM4 CH1,2 = PD12,13
-        // NOTE: Motor B IN1,2 = TIM4 CH3,4 = PD14,15
-        //hal::timer::Timer4::pwm_hz;
+        // Motor A IN1,2 = TIM4 CH1,2 = PD12,13
+        // Motor B IN1,2 = TIM4 CH3,4 = PD14,15
         let motor_a_ch1: hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false> =
                 hal::timer::Channel1::new(gpiod.pd12);
         let motor_a_ch2: hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false> =
@@ -285,9 +285,20 @@ mod app {
         let mut motor_pwm = cx.device.TIM4.pwm_hz(
                 (motor_a_ch1, motor_a_ch2, motor_b_ch1, motor_b_ch2),
                 5000.Hz(), &clocks);
+        // Motor A (connector J1) (right side; C1 > C2 = forward)
         motor_pwm.enable(hal::timer::Channel::C1);
+        motor_pwm.enable(hal::timer::Channel::C2);
         motor_pwm.set_duty(hal::timer::Channel::C1,
-                (motor_pwm.get_max_duty() as f32 * 0.25) as u16);
+                (motor_pwm.get_max_duty() as f32 * 0.1) as u16);
+        motor_pwm.set_duty(hal::timer::Channel::C2,
+                (motor_pwm.get_max_duty() as f32 * 0.0) as u16);
+        // Motor B (connector J2) (left side; C3 > C4 = forward)
+        motor_pwm.enable(hal::timer::Channel::C3);
+        motor_pwm.enable(hal::timer::Channel::C4);
+        motor_pwm.set_duty(hal::timer::Channel::C3,
+                (motor_pwm.get_max_duty() as f32 * 0.1) as u16);
+        motor_pwm.set_duty(hal::timer::Channel::C4,
+                (motor_pwm.get_max_duty() as f32 * 0.0) as u16);
 
         // UART1
 
