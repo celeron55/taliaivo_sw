@@ -35,6 +35,9 @@ use ringbuffer::{RingBuffer, ConstGenericRingBuffer};
 use sumobrain_common::{RobotInterface, BrainState, Map};
 use sumobrain_common::map::HoughLine;
 
+mod command_accumulator;
+use command_accumulator::CommandAccumulator;
+
 struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
@@ -190,6 +193,7 @@ mod app {
         rx: stm32f4xx_hal::serial::Rx<stm32f4xx_hal::pac::USART1, u8>,
         tx: stm32f4xx_hal::serial::Tx<stm32f4xx_hal::pac::USART1, u8>,
         txbuf: ConstGenericRingBuffer<u8, 1024>,
+        command_accumulator: CommandAccumulator<50>,
     }
 
     #[init]
@@ -213,6 +217,8 @@ mod app {
         // Software utilities
 
         init_logger();
+
+        info!("-!- Taliaivo up and running");
 
         // I/O
 
@@ -241,7 +247,7 @@ mod app {
         algorithm_task::spawn().ok();
         millis_counter_task::spawn().ok();
         led_task::spawn().ok();
-        //serial_tx_task::spawn().ok();
+        console_command_task::spawn().ok();
 
         // Initialize context
 
@@ -257,6 +263,7 @@ mod app {
                 rx: rx,
                 tx: tx,
                 txbuf: ConstGenericRingBuffer::new(),
+                command_accumulator: CommandAccumulator::new(),
             }
         )
     }
@@ -282,7 +289,7 @@ mod app {
             //cortex_m::asm::delay(16_000_000);
             //robot.wheel_speed_right += 1.0;
 
-            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+            //info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
             // Toggle LED for debugging
             //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
@@ -312,6 +319,23 @@ mod app {
             let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
             cx.local.led_pin.set_state(wanted_state.into());
             Systick::delay(1.millis()).await;
+        }
+    }
+
+    #[task(priority = 1, shared = [console_rxbuf, wanted_led_state], local = [command_accumulator])]
+    async fn console_command_task(mut cx: console_command_task::Context) {
+        loop {
+            Systick::delay(1.millis()).await;
+            let b_maybe = cx.shared.console_rxbuf.lock(|rxbuf| {
+                rxbuf.dequeue()
+            });
+            if let Some(b) = b_maybe {
+                //info!("Received byte: {:?} = {:?}", b, b as char);
+                if let Some(command) = cx.local.command_accumulator.put(b as char) {
+                    info!("Command: {:?}", command);
+                    // TODO: Implement commands
+                }
+            }
         }
     }
 
