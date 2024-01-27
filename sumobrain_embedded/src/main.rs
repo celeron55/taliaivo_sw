@@ -383,7 +383,11 @@ mod app {
         }
     }
 
-    #[task(priority = 1, shared = [console_rxbuf, wanted_led_state], local = [command_accumulator])]
+    #[task(
+        priority = 1,
+        shared = [console_rxbuf, wanted_led_state],
+        local = [command_accumulator]
+    )]
     async fn console_command_task(mut cx: console_command_task::Context) {
         loop {
             Systick::delay(1.millis()).await;
@@ -416,7 +420,6 @@ mod app {
                 rxbuf.push(b);
             });
         }
-
         if cx.local.usart1_txbuf.is_empty() {
             // Copy MULTI_LOGGER's buffer to txbuf
             // NOTE: This assumes there are only single-byte characters in the
@@ -444,9 +447,6 @@ mod app {
         local = []
     )]
     fn otg_fs_int(mut cx: otg_fs_int::Context) {
-        // Toggle LED for debugging
-        //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
-
         let otg_fs_int::SharedResources {
             __rtic_internal_marker,
             mut usb_dev,
@@ -464,44 +464,18 @@ mod app {
             if let Some(mut logger_txbuf) = logger_txbuf_option {
                 // Convert from string to bytes
                 let buf = logger_txbuf.as_bytes();
-
                 // Just throw the buffer to the peripheral and leave. It'll send
                 // what it can. We don't care how it went.
                 let _ = usb_serial.write(&buf);
-
-                /*// Write everything
-                //let count = buf.len();
-                // NOTE: This is a workaround. Limiting to 25 works, 30 doesn't.
-                let count = core::cmp::min(buf.len(), 25);
-                // Write
-                let mut write_offset = 0;
-                while write_offset < count {
-                    match usb_serial.write(&buf[write_offset..count]) {
-                        Ok(len) if len > 0 => {
-                            write_offset += len;
-                        }
-                        _ => {}
-                    }
-                }*/
             }
             // Read
             if usb_dev.poll(&mut [usb_serial]) {
                 let mut buf = [0u8; 64];
-                
                 match usb_serial.read(&mut buf) {
                     Ok(count) if count > 0 => {
                         for i in 0..count {
                             console_rxbuf.push(buf[i]);
                         }
-                        /*let mut write_offset = 0;
-                        while write_offset < count {
-                            match usb_serial.write(&mut buf[write_offset..count]) {
-                                Ok(len) if len > 0 => {
-                                    write_offset += len;
-                                }
-                                _ => {}
-                            }
-                        }*/
                     }
                     _ => {}
                 }
@@ -513,5 +487,4 @@ mod app {
 #[panic_handler]
 fn panic(panic_info: &core::panic::PanicInfo) -> ! {
     cortex_m::peripheral::SCB::sys_reset();
-    //loop {}
 }
