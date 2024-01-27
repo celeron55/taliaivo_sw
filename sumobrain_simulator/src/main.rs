@@ -351,7 +351,7 @@ impl Robot {
         let max_detection_distance: f32 = 40.0;
         // Below a certain range sensor result is essentially random so it will
         // be clamped
-        let min_detection_distance: f32 = 5.0;
+        let min_detection_distance: f32 = 7.0;
 
         let position_sensor_angles = if SIMULATE_LIDAR {
             // Simulate a lidar turret (have to have the same number of entries)
