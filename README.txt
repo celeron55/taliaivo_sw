@@ -79,3 +79,10 @@ $ cd sumobrain_embedded
 $ arm-none-eabi-gdb ../target/thumbv7em-none-eabihf/release/sumobrain_embedded
 (gdb) target extended-remote localhost:3333
 (gdb) break Reset
+
+Editing
+-------
+- Use any editor (vim is of course recommended 8-))
+- Install bacon and run it in another terminal
+$ cargo install --locked bacon
+$ bacon
