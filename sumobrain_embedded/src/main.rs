@@ -167,11 +167,13 @@ impl Log for MultiLogger {
             cortex_m::interrupt::free(|cs| { 
                 if let Some(ref mut buffer) =
                         self.uart_buffer.borrow(cs).borrow_mut().deref_mut() {
-                    let _ = writeln!(buffer, "[{}] {}\r", record.level(), record.args());
+                    let _ = buffer.write_fmt(format_args!("[{}] {}\r\n",
+                            record.level(), record.args()));
                 }
                 if let Some(ref mut buffer) =
                         self.usb_buffer.borrow(cs).borrow_mut().deref_mut() {
-                    let _ = writeln!(buffer, "[{}] {}\r", record.level(), record.args());
+                    let _ = buffer.write_fmt(format_args!("[{}] {}\r\n",
+                            record.level(), record.args()));
                 }
             });
             // Trigger write to hardware by triggering USART1 interrupt
@@ -339,6 +341,7 @@ mod app {
         let mut robot: Robot = Robot::new();
 
         let interval_ms = 1000 / sumobrain_common::UPS as u64;
+        //let interval_ms = 1000;
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
@@ -347,7 +350,7 @@ mod app {
             //cortex_m::asm::delay(16_000_000);
             //robot.wheel_speed_right += 1.0;
 
-            //info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
             // Toggle LED for debugging
             //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
@@ -452,28 +455,36 @@ mod app {
             mut console_rxbuf,
         } = cx.shared;
 
-        // Write
-        (&mut usb_dev, &mut usb_serial).lock(|usb_dev, usb_serial| {
+        // TODO: Maybe locking console_rxbuf here with usb_dev and usb_serial
+        // isn't a good idea
+        (&mut usb_dev, &mut usb_serial, &mut console_rxbuf).lock(
+                |usb_dev, usb_serial, console_rxbuf| {
+            // Write
             let logger_txbuf_option = MULTI_LOGGER.get_usb_buffer();
             if let Some(mut logger_txbuf) = logger_txbuf_option {
                 // Convert from string to bytes
                 let buf = logger_txbuf.as_bytes();
+
+                // Just throw the buffer to the peripheral and leave. It'll send
+                // what it can. We don't care how it went.
+                let _ = usb_serial.write(&buf);
+
+                /*// Write everything
+                //let count = buf.len();
+                // NOTE: This is a workaround. Limiting to 25 works, 30 doesn't.
+                let count = core::cmp::min(buf.len(), 25);
                 // Write
                 let mut write_offset = 0;
-                while write_offset < buf.len() {
-                    match usb_serial.write(&buf[write_offset..buf.len()]) {
+                while write_offset < count {
+                    match usb_serial.write(&buf[write_offset..count]) {
                         Ok(len) if len > 0 => {
                             write_offset += len;
                         }
                         _ => {}
                     }
-                }
+                }*/
             }
-        });
-
-        // Read
-        (&mut usb_dev, &mut usb_serial, &mut console_rxbuf).lock(
-                |usb_dev, usb_serial, console_rxbuf| {
+            // Read
             if usb_dev.poll(&mut [usb_serial]) {
                 let mut buf = [0u8; 64];
                 
