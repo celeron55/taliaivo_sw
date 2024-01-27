@@ -16,7 +16,6 @@ impl<const BUF_LEN: usize> CommandAccumulator<BUF_LEN> {
     }
 
     pub fn put(&mut self, c: char) -> Option<ArrayString<BUF_LEN>> {
-        // TODO
         if c == '\n' || c == '\r' {
             if self.buf.len() > 0 {
                 // NOTE: This is a bit wasteful, we could instead use a
