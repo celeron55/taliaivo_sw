@@ -214,8 +214,9 @@ fn init_logger() {
 
 // ADC DMA
 
+const ADC_NUM_CHANNELS: usize = 6;
 type AdcDmaTransfer = Transfer<Stream0<DMA2>, 0, Adc<ADC1>, PeripheralToMemory,
-        &'static mut [u16; 2]>;
+        &'static mut [u16; ADC_NUM_CHANNELS]>;
 
 // Motor control
 
@@ -266,6 +267,7 @@ mod app {
         console_rxbuf: ConstGenericRingBuffer<u8, 1024>,
         usb_dev: UsbDevice<'static, otg_fs::UsbBusType>,
         usb_serial: usbd_serial::SerialPort<'static, otg_fs::UsbBusType>,
+        adc_transfer: AdcDmaTransfer,
     }
 
     #[local]
@@ -276,9 +278,15 @@ mod app {
         usart1_txbuf: ConstGenericRingBuffer<u8, 1024>,
         command_accumulator: CommandAccumulator<50>,
         motor_pwm: MotorPwm,
+        adc_buffer: Option<&'static mut [u16; ADC_NUM_CHANNELS]>,
     }
 
-    #[init]
+    #[init(
+        local = [
+            adc_buffer1: [u16; ADC_NUM_CHANNELS] = [0; ADC_NUM_CHANNELS],
+            adc_buffer2: [u16; ADC_NUM_CHANNELS] = [0; ADC_NUM_CHANNELS]
+        ]
+    )]
     fn init(cx: init::Context) -> (Shared, Local) {
         static mut EP_MEMORY: [u32; 1024] = [0; 1024];
         static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<otg_fs::UsbBusType>> = None;
@@ -394,7 +402,40 @@ mod app {
 
         // ADC
 
+        let adc1_c0 = gpioa.pa0.into_analog();
+        let adc1_c1 = gpioa.pa1.into_analog();
+        let adc1_c2 = gpioa.pa2.into_analog();
+        let adc1_c3 = gpioa.pa3.into_analog();
+        let adc1_c4 = gpioa.pa4.into_analog();
+        let adc1_c5 = gpioa.pa5.into_analog();
 
+        let adc_config = AdcConfig::default()
+            .dma(Dma::Continuous)
+            .scan(Scan::Enabled)
+            .resolution(Resolution::Ten)
+            .clock(Clock::Pclk2_div_8);
+
+        let mut adc = Adc::adc1(cx.device.ADC1, true, adc_config);
+        adc.configure_channel(&adc1_c0, Sequence::One, SampleTime::Cycles_480);
+        adc.configure_channel(&adc1_c1, Sequence::Two, SampleTime::Cycles_480);
+        adc.configure_channel(&adc1_c2, Sequence::Three, SampleTime::Cycles_480);
+        adc.configure_channel(&adc1_c3, Sequence::Four, SampleTime::Cycles_480);
+        adc.configure_channel(&adc1_c4, Sequence::Five, SampleTime::Cycles_480);
+        adc.configure_channel(&adc1_c5, Sequence::Six, SampleTime::Cycles_480);
+
+        let dma = StreamsTuple::new(cx.device.DMA2);
+        let dma_config = DmaConfig::default()
+            .transfer_complete_interrupt(true)
+            .memory_increment(true)
+            .double_buffer(false);
+
+        let adc_transfer = Transfer::init_peripheral_to_memory(
+            dma.0,
+            adc,
+            cx.local.adc_buffer1,
+            None,
+            dma_config
+        );
 
         // Schedule tasks
 
@@ -412,6 +453,7 @@ mod app {
                 console_rxbuf: ConstGenericRingBuffer::new(),
                 usb_dev: usb_dev,
                 usb_serial: usb_serial,
+                adc_transfer: adc_transfer,
             },
             Local {
                 led_pin: led_pin,
@@ -420,6 +462,7 @@ mod app {
                 usart1_txbuf: ConstGenericRingBuffer::new(),
                 command_accumulator: CommandAccumulator::new(),
                 motor_pwm: motor_pwm,
+                adc_buffer: Some(cx.local.adc_buffer2),
             }
         )
     }
@@ -432,7 +475,7 @@ mod app {
     }
 
     #[task(priority = 1,
-        shared = [millis_counter, wanted_led_state],
+        shared = [millis_counter, wanted_led_state, adc_transfer],
         local = [motor_pwm]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
@@ -467,6 +510,13 @@ mod app {
             if additional_delay > 0 {
                 Systick::delay((additional_delay as u32).millis()).await;
             }
+
+            // Start ADC
+            cx.shared.adc_transfer.lock(|transfer| {
+                transfer.start(|adc| {
+                    adc.start_conversion();
+                });
+            });
         }
     }
 
@@ -587,6 +637,30 @@ mod app {
                 }
             }
         });
+    }
+
+    #[task(binds = DMA2_STREAM0, shared = [adc_transfer], local = [adc_buffer])]
+    fn adc_dma(cx: adc_dma::Context) {
+        let mut shared = cx.shared;
+        let local = cx.local;
+
+        let buffer = shared.adc_transfer.lock(|transfer| {
+            let (buffer, _) = transfer
+                .next_transfer(local.adc_buffer.take().unwrap())
+                .unwrap();
+            buffer
+        });
+
+        // Read out values from buffer
+        let result = buffer.clone();
+
+        // Return buffer to resources pool for next transfer
+        *local.adc_buffer = Some(buffer);
+
+        // Send over data to UART
+        info!("ADC result: {:?} {:?} {:?} {:?} {:?} {:?}",
+                result[0], result[1], result[2],
+                result[3], result[4], result[5]);
     }
 }
 
