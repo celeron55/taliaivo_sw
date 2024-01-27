@@ -14,6 +14,7 @@ use stm32f4xx_hal::prelude::*;
 use stm32f4xx_hal::serial::{config::Config, Event, Serial};
 use stm32f4xx_hal::pac as pac;
 use stm32f4xx_hal::otg_fs;
+use stm32f4xx_hal as hal;
 use rtic::app;
 use rtic_monotonics::systick::*;
 use usb_device::{prelude::*};
@@ -257,11 +258,36 @@ mod app {
         // I/O
 
         let gpioa = cx.device.GPIOA.split();
+        let gpiod = cx.device.GPIOD.split();
 
         let mut led_pin = gpioa.pa8.into_push_pull_output();
         led_pin.set_high();
 
         let mut debug_pin = cx.device.GPIOB.split().pb10.into_push_pull_output();
+
+        let mut motor_a_enable_pin = gpiod.pd10.into_push_pull_output();
+        let mut motor_b_enable_pin = gpiod.pd11.into_push_pull_output();
+
+        motor_a_enable_pin.set_low();
+        motor_b_enable_pin.set_low();
+
+        // NOTE: Motor A IN1,2 = TIM4 CH1,2 = PD12,13
+        // NOTE: Motor B IN1,2 = TIM4 CH3,4 = PD14,15
+        //hal::timer::Timer4::pwm_hz;
+        let motor_a_ch1: hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false> =
+                hal::timer::Channel1::new(gpiod.pd12);
+        let motor_a_ch2: hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false> =
+                hal::timer::Channel2::new(gpiod.pd13);
+        let motor_b_ch1: hal::timer::ChannelBuilder<hal::pac::TIM4, 2, false> =
+                hal::timer::Channel3::new(gpiod.pd14);
+        let motor_b_ch2: hal::timer::ChannelBuilder<hal::pac::TIM4, 3, false> =
+                hal::timer::Channel4::new(gpiod.pd15);
+        let mut motor_pwm = cx.device.TIM4.pwm_hz(
+                (motor_a_ch1, motor_a_ch2, motor_b_ch1, motor_b_ch2),
+                5000.Hz(), &clocks);
+        motor_pwm.enable(hal::timer::Channel::C1);
+        motor_pwm.set_duty(hal::timer::Channel::C1,
+                (motor_pwm.get_max_duty() as f32 * 0.25) as u16);
 
         // UART1
 
@@ -350,7 +376,7 @@ mod app {
             //cortex_m::asm::delay(16_000_000);
             //robot.wheel_speed_right += 1.0;
 
-            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+            //info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
             // Toggle LED for debugging
             //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
