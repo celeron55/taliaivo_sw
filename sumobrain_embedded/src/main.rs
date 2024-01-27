@@ -137,37 +137,7 @@ mod app {
     fn init(cx: init::Context) -> (Shared, Local) {
         // System clock
 
-        /* TODO: This Embassy config seemed to closest match what we actually
-                 want. Try to get the same result here
-    
-        let mut config = Config::default();
-        {
-            use embassy_stm32::rcc::*;
-            config.rcc.hse = Some(Hse {
-                freq: Hertz(16_000_000),
-                mode: HseMode::Oscillator,
-            });
-            config.rcc.pll_src = PllSource::HSE;
-            config.rcc.pll = Some(Pll {
-                prediv: PllPreDiv::DIV8,
-                mul: PllMul::MUL168,
-                divp: Some(PllPDiv::DIV2), // 8mhz / 4 * 168 / 2 = 168Mhz.
-                divq: Some(PllQDiv::DIV7), // 8mhz / 4 * 168 / 7 = 48Mhz.
-                divr: None,
-            });
-            config.rcc.ahb_pre = AHBPrescaler::DIV1;
-            config.rcc.apb1_pre = APBPrescaler::DIV4;
-            config.rcc.apb2_pre = APBPrescaler::DIV2;
-            config.rcc.sys = Sysclk::PLL1_P;
-        }
-        let p = embassy_stm32::init(config);
-        */
-
         let rcc = cx.device.RCC.constrain();
-        //let clocks = rcc.cfgr.sysclk(48.MHz()).freeze(); // Internal at 48MHz
-        //let clocks = rcc.cfgr.sysclk(168.MHz()).freeze();
-        // Results in about 39mA taken via USB with stlink not connected
-        // - Powering via stlink adds about 34mA
         let clocks = rcc.cfgr
             .use_hse(16.MHz()) // Use external crystal (HSE)
             .hclk(168.MHz())
@@ -179,10 +149,6 @@ mod app {
         // SysTick
 
         let systick_token = rtic_monotonics::create_systick_token!();
-        /*let systick_interval_ms = 1;
-        Systick::start(cx.core.SYST,
-                clocks.sysclk().to_Hz() / 1000 * systick_interval_ms - 1,
-                systick_token);*/
         Systick::start(cx.core.SYST, 168_000_000, systick_token);
 
         // I/O
@@ -191,14 +157,6 @@ mod app {
 
         let mut led_pin = gpioa.pa8.into_push_pull_output();
         led_pin.set_high();
-
-        /*// Dumb synchronous busywait led blink for testing
-        loop {
-            led_pin.set_high();
-            cortex_m::asm::delay(16_000_000);
-            led_pin.set_low();
-            cortex_m::asm::delay(16_000_000);
-        }*/
 
         let mut debug_pin = cx.device.GPIOB.split().pb10.into_push_pull_output();
 
@@ -222,65 +180,15 @@ mod app {
         )
     }
 
-    //#[idle(shared = [millis_counter, wanted_led_state], local = [])]
     #[idle(shared = [], local = [])]
     fn idle(mut cx: idle::Context) -> ! {
         loop {
             cortex_m::asm::nop();
         }
-
-        /*loop {
-            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
-            let foo = t1 > 5;
-            cx.shared.wanted_led_state.lock(|value| { *value = foo; });
-            cortex_m::asm::nop();
-            cortex_m::asm::delay(1_000);
-        }*/
-
-        /*let mut brain = BrainState::new(0);
-        let mut robot: Robot = Robot::new();
-
-        let interval_ms = 1000 / sumobrain_common::UPS as u64;
-        loop {
-            let mut t0 = cx.shared.millis_counter.lock(|value|{ *value });
-
-            brain.update(&mut robot);
-
-            //cortex_m::asm::delay(16_000_000);
-            //robot.wheel_speed_right += 1.0;
-
-            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
-
-            // Toggle LED for debugging
-            cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
-
-            // Enforce minimum interval
-            loop {
-                let t1 = cx.shared.millis_counter.lock(|value|{ *value });
-                if t1 >= t0 + interval_ms {
-                    break
-                }
-                cortex_m::asm::nop();
-                cortex_m::asm::delay(1_000);
-            }
-        }*/
     }
 
     #[task(priority = 1, shared = [millis_counter, wanted_led_state], local = [])]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
-        /*loop {
-            // Toggle LED for debugging
-            cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
-            Systick::delay(500.millis()).await;
-        }*/
-
-        /*loop {
-            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
-            let foo = t1 > 5;
-            cx.shared.wanted_led_state.lock(|value| { *value = foo; });
-            Systick::delay(1000.millis()).await;
-        }*/
-
         let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
 
