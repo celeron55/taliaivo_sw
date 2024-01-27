@@ -1,14 +1,17 @@
 #![no_std]
 #![no_main]
 #![feature(type_alias_impl_trait)]
+#![allow(unused_variables)] 
 //#![deny(unsafe_code)]
 //#![allow(clippy::empty_loop)]
 
 use cortex_m;
-//use cortex_m::interrupt::{Mutex, CriticalSection};
+use cortex_m::interrupt::{Mutex, CriticalSection};
 //use cortex_m_rt::{entry, exception};
 use stm32f4xx_hal::gpio::{Output, PushPull, PA8};
 use stm32f4xx_hal::prelude::*;
+use stm32f4xx_hal::serial::{config::Config, Event, Serial};
+use stm32f4xx_hal::pac as pac;
 use rtic::app;
 use rtic_monotonics::systick::*;
 
@@ -17,14 +20,15 @@ use nalgebra::{Vector2, Point2, Rotation2};
 use core::cell::RefCell;
 use core::ops::DerefMut;
 use core::fmt::Write; // For ArrayString
-use core::borrow::BorrowMut;
-use core::sync::atomic::{Ordering, AtomicU32, AtomicBool};
-use static_cell::StaticCell;
-use futures::future::join;
-use futures::join;
-use log;
+//use log;
 use log::{Record, Metadata, Log, info, warn};
-use once_cell::race::OnceRef;
+use ringbuffer::{RingBuffer, ConstGenericRingBuffer};
+//use core::borrow::BorrowMut;
+//use core::sync::atomic::{Ordering, AtomicU32, AtomicBool};
+//use static_cell::StaticCell;
+//use futures::future::join;
+//use futures::join;
+//use once_cell::race::OnceRef;
 //use defmt::{panic, *};
 //use {defmt_rtt as _, panic_probe as _};
 
@@ -117,6 +121,57 @@ impl RobotInterface for Robot {
     }
 }
 
+struct SerialLogger {
+    buffer: Mutex<RefCell<Option<ArrayString<1024>>>>,
+}
+
+impl SerialLogger {
+    fn get_buffer(&self) -> Option<ArrayString<1024>> {
+        let mut buf2: Option<ArrayString<1024>> = Some(ArrayString::new());
+        cortex_m::interrupt::free(|cs| {
+            // This replaces the logger buffer with an empty one, and we get the
+            // possibly filled in one
+            buf2 = self.buffer.borrow(cs).replace(buf2);
+        });
+        buf2
+    }
+}
+
+impl Log for SerialLogger {
+    fn enabled(&self, metadata: &Metadata) -> bool {
+        metadata.level() <= log::Level::Info // TODO: Adjust as needed
+    }
+
+    fn log(&self, record: &Record) {
+        if self.enabled(record.metadata()) {
+            cortex_m::interrupt::free(|cs| { 
+                if let Some(ref mut buffer) = self.buffer.borrow(cs).borrow_mut().deref_mut() {
+                    let _ = writeln!(buffer, "[{}] {}\r", record.level(), record.args());
+                }
+            });
+            // TODO: Trigger write to hardware, e.g. by triggering USART1 interrupt
+            pac::NVIC::unpend(pac::Interrupt::USART1);
+        }
+    }
+
+    fn flush(&self) {
+        // Flushing is handled elsewhere
+    }
+}
+
+static LOGGER: SerialLogger = SerialLogger {
+    buffer: Mutex::new(RefCell::new(None)),
+};
+
+// Function to initialize the logger
+fn init_logger() {
+    cortex_m::interrupt::free(|cs| {
+        LOGGER.buffer.borrow(cs).replace(Some(ArrayString::new()));
+    });
+    log::set_logger(&LOGGER).unwrap();
+    log::set_max_level(log::LevelFilter::Info); // TODO: Adjust as needed
+}
+
 #[app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [UART4, UART5, USART6])]
 mod app {
     use super::*;
@@ -131,6 +186,9 @@ mod app {
     struct Local {
         led_pin: PA8<Output<PushPull>>,
         state: bool, // TODO: Use or remove
+        rx: stm32f4xx_hal::serial::Rx<stm32f4xx_hal::pac::USART1, u8>,
+        tx: stm32f4xx_hal::serial::Tx<stm32f4xx_hal::pac::USART1, u8>,
+        txbuf: ConstGenericRingBuffer<u8, 1024>,
     }
 
     #[init]
@@ -151,6 +209,10 @@ mod app {
         let systick_token = rtic_monotonics::create_systick_token!();
         Systick::start(cx.core.SYST, 168_000_000, systick_token);
 
+        // Software utilities
+
+        init_logger();
+
         // I/O
 
         let gpioa = cx.device.GPIOA.split();
@@ -160,11 +222,25 @@ mod app {
 
         let mut debug_pin = cx.device.GPIOB.split().pb10.into_push_pull_output();
 
+        // UART1
+
+        let tx = gpioa.pa9.into_alternate::<7>();
+        let rx = gpioa.pa10.into_alternate::<7>();
+        let mut serial_usart1: Serial<stm32f4xx_hal::pac::USART1, u8> = Serial::new(
+            cx.device.USART1,
+            (tx, rx),
+            Config::default().baudrate(115_200.bps()),
+            &clocks
+        ).unwrap();
+        serial_usart1.listen(Event::RxNotEmpty | Event::TxEmpty);
+        let (tx, rx) = serial_usart1.split();
+
         // Schedule tasks
 
         algorithm_task::spawn().ok();
         millis_counter_task::spawn().ok();
         led_task::spawn().ok();
+        //serial_tx_task::spawn().ok();
 
         // Initialize context
 
@@ -176,6 +252,9 @@ mod app {
             Local {
                 led_pin: led_pin,
                 state: false,
+                rx: rx,
+                tx: tx,
+                txbuf: ConstGenericRingBuffer::new(),
             }
         )
     }
@@ -194,7 +273,7 @@ mod app {
 
         let interval_ms = 1000 / sumobrain_common::UPS as u64;
         loop {
-            let mut t0 = cx.shared.millis_counter.lock(|value|{ *value });
+            let t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
             brain.update(&mut robot);
 
@@ -204,7 +283,7 @@ mod app {
             info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
             // Toggle LED for debugging
-            cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+            //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
 
             // Enforce minimum interval
             let t1 = cx.shared.millis_counter.lock(|value|{ *value });
@@ -228,11 +307,51 @@ mod app {
     #[task(priority = 2, shared = [wanted_led_state], local = [led_pin, state])]
     async fn led_task(mut cx: led_task::Context) {
         loop {
-            let wanted_state = cx.shared.wanted_led_state.lock(|value| {
-                *value
-            });
+            let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
             cx.local.led_pin.set_state(wanted_state.into());
             Systick::delay(1.millis()).await;
+            //cx.local.tx.write('a' as u8);
+        }
+    }
+
+    /*#[task(priority = 2, shared = [], local = [tx])]
+    async fn serial_tx_task(mut cx: led_task::Context) {
+        loop {
+            Systick::delay(1.millis()).await;
+
+            cx.local.tx.write('a' as u8);
+        }
+    }*/
+
+    #[task(binds = USART1, shared = [wanted_led_state], local = [rx, tx, txbuf])]
+    fn usart1(mut cx: usart1::Context) {
+        // Toggle LED for debugging
+        cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+
+        // TODO: Check if there is something to receive, and if so, receive it
+        // into somewhere
+        if let Ok(b) = cx.local.rx.read() {
+            // TODO: Do something with the byte
+        }
+
+        if cx.local.txbuf.is_empty() {
+            // Copy LOGGER's buffer to txbuf
+            // NOTE: This assumes there are only single-byte characters in the
+            // buffer. Otherwise it won't fully fit in our byte-based txbuf
+            let logger_txbuf_option = LOGGER.get_buffer();
+            if let Some(mut logger_txbuf) = logger_txbuf_option {
+                //cx.local.txbuf.push('b' as u8);
+                cx.local.txbuf.push('0' as u8 + logger_txbuf.len() as u8);
+                for b in logger_txbuf.bytes() {
+                    cx.local.txbuf.push(b);
+                }
+            }
+        }
+        /*if cx.local.txbuf.is_empty() {
+            cx.local.txbuf.push('b' as u8);
+        }*/
+        if let Some(b) = cx.local.txbuf.dequeue() {
+            cx.local.tx.write(b);
         }
     }
 }

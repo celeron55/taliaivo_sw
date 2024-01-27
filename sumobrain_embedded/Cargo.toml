@@ -26,6 +26,7 @@ static_cell = { version = "2", features = ["nightly"]}
 chrono = { version = "^0.4", default-features = false}
 log = { version = "0.4" }
 once_cell = { version = "1.19.0", default-features = false, features = ["race"] }
+ringbuffer = { version = "0.15.0", default-features = false }
 
 # Cross platform algorithm
 sumobrain_common = { path = "../sumobrain_common" }
