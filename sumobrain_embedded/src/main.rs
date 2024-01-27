@@ -123,6 +123,7 @@ mod app {
 
     #[shared]
     struct Shared {
+        millis_counter: u64,
         //wanted_led_state: Mutex<RefCell<bool>>,
         //wanted_led_state: AtomicBool,
         wanted_led_state: bool,
@@ -205,13 +206,15 @@ mod app {
 
         // Schedule tasks
 
+        //algorithm_task::spawn().ok();
+        //millis_counter_task::spawn().ok();
         led_task::spawn().ok();
-        algorithm_task::spawn().ok();
 
         // Initialize context
 
         (
             Shared {
+                millis_counter: 0,
                 //wanted_led_state: Mutex::new(RefCell::new(true)),
                 //wanted_led_state: AtomicBool::new(true),
                 wanted_led_state: true,
@@ -223,30 +226,15 @@ mod app {
         )
     }
 
-    #[idle(shared = [wanted_led_state], local = [])]
+    #[idle(shared = [millis_counter, wanted_led_state], local = [])]
     fn idle(mut cx: idle::Context) -> ! {
-        loop {
-            cortex_m::asm::nop();
-        }
-    }
-
-    #[task(priority = 1, shared = [wanted_led_state], local = [])]
-    async fn algorithm_task(mut cx: algorithm_task::Context) {
-        loop {
-            // Toggle LED for debugging
-            cx.shared.wanted_led_state.lock(|value| { *value = !*value; *value });
-            //cx.shared.wanted_led_state.lock(|value| { *value = false; *value });
-            Systick::delay(500.millis()).await;
-        }
-
-        // TODO: Enable
-        /*let mut brain = BrainState::new(0);
+        let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
 
-        let interval_us = 1000000 / sumobrain_common::UPS as u64;
-        // TODO: Interval timing
-        //let mut ticker = Ticker::every(Duration::from_micros(interval_us));
+        /*let interval_ms = 1000 / sumobrain_common::UPS as u64;
         loop {
+            let mut t0 = cx.shared.millis_counter.lock(|value|{ *value });
+
             brain.update(&mut robot);
 
             //cortex_m::asm::delay(16_000_000);
@@ -254,23 +242,62 @@ mod app {
 
             info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
-            // Make sure other tasks get at least some time
-            //Timer::after_millis(1).await;
-
-            //ticker.next().await;
-
             // Toggle LED for debugging
             cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+
+            // Enforce minimum interval
+            loop {
+                let t1 = cx.shared.millis_counter.lock(|value|{ *value });
+                if t1 >= t0 + interval_ms {
+                    break
+                }
+                cortex_m::asm::nop();
+                cortex_m::asm::delay(1_000);
+            }
         }*/
+
+        loop {
+            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
+            let foo = t1 > 5;
+            cx.shared.wanted_led_state.lock(|value| { *value = foo; });
+            cortex_m::asm::nop();
+            cortex_m::asm::delay(1_000);
+        }
     }
 
-    #[task(priority = 2, shared = [wanted_led_state], local = [led_pin, state])]
+    /*#[task(priority = 1, shared = [wanted_led_state], local = [])]
+    async fn algorithm_task(mut cx: algorithm_task::Context) {
+        /*loop {
+            // Toggle LED for debugging
+            cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+            Systick::delay(500.millis()).await;
+        }*/
+    }*/
+
+    /*#[task(priority = 2, shared = [millis_counter], local = [])]
+    async fn millis_counter_task(mut cx: millis_counter_task::Context) {
+        loop {
+            // TODO: Is this a hack?
+            cx.shared.millis_counter.lock(|value| {
+                *value = *value + 5;
+            });
+            Systick::delay(5.millis()).await;
+        }
+    }*/
+
+    #[task(priority = 2, shared = [wanted_led_state, millis_counter], local = [led_pin, state])]
     async fn led_task(mut cx: led_task::Context) {
         loop {
             let wanted_state = cx.shared.wanted_led_state.lock(|value| {
                 *value
             });
             cx.local.led_pin.set_state(wanted_state.into());
+
+            // TODO: Is this a hack?
+            cx.shared.millis_counter.lock(|value| {
+                *value = *value + 5;
+            });
+
             Systick::delay(5.millis()).await;
 
             /*cx.local.state = !*cx.local.state;
