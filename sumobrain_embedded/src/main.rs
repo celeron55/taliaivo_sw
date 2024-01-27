@@ -124,8 +124,6 @@ mod app {
     #[shared]
     struct Shared {
         millis_counter: u64,
-        //wanted_led_state: Mutex<RefCell<bool>>,
-        //wanted_led_state: AtomicBool,
         wanted_led_state: bool,
     }
 
@@ -206,7 +204,7 @@ mod app {
 
         // Schedule tasks
 
-        //algorithm_task::spawn().ok();
+        algorithm_task::spawn().ok();
         //millis_counter_task::spawn().ok();
         led_task::spawn().ok();
 
@@ -215,8 +213,6 @@ mod app {
         (
             Shared {
                 millis_counter: 0,
-                //wanted_led_state: Mutex::new(RefCell::new(true)),
-                //wanted_led_state: AtomicBool::new(true),
                 wanted_led_state: true,
             },
             Local {
@@ -226,12 +222,25 @@ mod app {
         )
     }
 
-    #[idle(shared = [millis_counter, wanted_led_state], local = [])]
+    //#[idle(shared = [millis_counter, wanted_led_state], local = [])]
+    #[idle(shared = [], local = [])]
     fn idle(mut cx: idle::Context) -> ! {
-        let mut brain = BrainState::new(0);
+        loop {
+            cortex_m::asm::nop();
+        }
+
+        /*loop {
+            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
+            let foo = t1 > 5;
+            cx.shared.wanted_led_state.lock(|value| { *value = foo; });
+            cortex_m::asm::nop();
+            cortex_m::asm::delay(1_000);
+        }*/
+
+        /*let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
 
-        /*let interval_ms = 1000 / sumobrain_common::UPS as u64;
+        let interval_ms = 1000 / sumobrain_common::UPS as u64;
         loop {
             let mut t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
@@ -255,24 +264,45 @@ mod app {
                 cortex_m::asm::delay(1_000);
             }
         }*/
-
-        loop {
-            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
-            let foo = t1 > 5;
-            cx.shared.wanted_led_state.lock(|value| { *value = foo; });
-            cortex_m::asm::nop();
-            cortex_m::asm::delay(1_000);
-        }
     }
 
-    /*#[task(priority = 1, shared = [wanted_led_state], local = [])]
+    #[task(priority = 1, shared = [millis_counter, wanted_led_state], local = [])]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
         /*loop {
             // Toggle LED for debugging
             cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
             Systick::delay(500.millis()).await;
         }*/
-    }*/
+
+        /*loop {
+            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
+            let foo = t1 > 5;
+            cx.shared.wanted_led_state.lock(|value| { *value = foo; });
+            Systick::delay(1000.millis()).await;
+        }*/
+
+        let mut brain = BrainState::new(0);
+        let mut robot: Robot = Robot::new();
+
+        let interval_ms = 1000 / sumobrain_common::UPS as u64;
+        loop {
+            let mut t0 = cx.shared.millis_counter.lock(|value|{ *value });
+
+            brain.update(&mut robot);
+
+            //cortex_m::asm::delay(16_000_000);
+            //robot.wheel_speed_right += 1.0;
+
+            info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+
+            // Toggle LED for debugging
+            cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+
+            // Enforce minimum interval
+            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
+            Systick::delay(((t1 - t0) as u32).millis()).await;
+        }
+    }
 
     /*#[task(priority = 2, shared = [millis_counter], local = [])]
     async fn millis_counter_task(mut cx: millis_counter_task::Context) {
