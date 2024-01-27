@@ -149,7 +149,7 @@ impl Log for SerialLogger {
                     let _ = writeln!(buffer, "[{}] {}\r", record.level(), record.args());
                 }
             });
-            // TODO: Trigger write to hardware, e.g. by triggering USART1 interrupt
+            // Trigger write to hardware by triggering USART1 interrupt
             pac::NVIC::unpend(pac::Interrupt::USART1);
         }
     }
@@ -180,6 +180,7 @@ mod app {
     struct Shared {
         millis_counter: u64,
         wanted_led_state: bool,
+        console_rxbuf: ConstGenericRingBuffer<u8, 1024>,
     }
 
     #[local]
@@ -248,6 +249,7 @@ mod app {
             Shared {
                 millis_counter: 0,
                 wanted_led_state: true,
+                console_rxbuf: ConstGenericRingBuffer::new(),
             },
             Local {
                 led_pin: led_pin,
@@ -310,28 +312,18 @@ mod app {
             let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
             cx.local.led_pin.set_state(wanted_state.into());
             Systick::delay(1.millis()).await;
-            //cx.local.tx.write('a' as u8);
         }
     }
 
-    /*#[task(priority = 2, shared = [], local = [tx])]
-    async fn serial_tx_task(mut cx: led_task::Context) {
-        loop {
-            Systick::delay(1.millis()).await;
-
-            cx.local.tx.write('a' as u8);
-        }
-    }*/
-
-    #[task(binds = USART1, shared = [wanted_led_state], local = [rx, tx, txbuf])]
+    #[task(binds = USART1, shared = [wanted_led_state, console_rxbuf], local = [rx, tx, txbuf])]
     fn usart1(mut cx: usart1::Context) {
-        // Toggle LED for debugging
-        cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
-
-        // TODO: Check if there is something to receive, and if so, receive it
-        // into somewhere
+        // Check if there is something to receive, and if so, receive it into
+        // somewhere
         if let Ok(b) = cx.local.rx.read() {
-            // TODO: Do something with the byte
+            //info!("Received: {:?}", b);
+            cx.shared.console_rxbuf.lock(|rxbuf| {
+                rxbuf.push(b);
+            });
         }
 
         if cx.local.txbuf.is_empty() {
@@ -340,16 +332,11 @@ mod app {
             // buffer. Otherwise it won't fully fit in our byte-based txbuf
             let logger_txbuf_option = LOGGER.get_buffer();
             if let Some(mut logger_txbuf) = logger_txbuf_option {
-                //cx.local.txbuf.push('b' as u8);
-                cx.local.txbuf.push('0' as u8 + logger_txbuf.len() as u8);
                 for b in logger_txbuf.bytes() {
                     cx.local.txbuf.push(b);
                 }
             }
         }
-        /*if cx.local.txbuf.is_empty() {
-            cx.local.txbuf.push('b' as u8);
-        }*/
         if let Some(b) = cx.local.txbuf.dequeue() {
             cx.local.tx.write(b);
         }
