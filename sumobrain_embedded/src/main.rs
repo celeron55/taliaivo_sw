@@ -205,7 +205,7 @@ mod app {
         // Schedule tasks
 
         algorithm_task::spawn().ok();
-        //millis_counter_task::spawn().ok();
+        millis_counter_task::spawn().ok();
         led_task::spawn().ok();
 
         // Initialize context
@@ -300,41 +300,31 @@ mod app {
 
             // Enforce minimum interval
             let t1 = cx.shared.millis_counter.lock(|value|{ *value });
-            Systick::delay(((t1 - t0) as u32).millis()).await;
+            let additional_delay = t0 as i64 + interval_ms as i64 - t1 as i64;
+            if additional_delay > 0 {
+                Systick::delay((additional_delay as u32).millis()).await;
+            }
         }
     }
 
-    /*#[task(priority = 2, shared = [millis_counter], local = [])]
+    #[task(priority = 2, shared = [millis_counter], local = [])]
     async fn millis_counter_task(mut cx: millis_counter_task::Context) {
         loop {
-            // TODO: Is this a hack?
             cx.shared.millis_counter.lock(|value| {
-                *value = *value + 5;
+                *value = *value + 1;
             });
-            Systick::delay(5.millis()).await;
+            Systick::delay(1.millis()).await;
         }
-    }*/
+    }
 
-    #[task(priority = 2, shared = [wanted_led_state, millis_counter], local = [led_pin, state])]
+    #[task(priority = 2, shared = [wanted_led_state], local = [led_pin, state])]
     async fn led_task(mut cx: led_task::Context) {
         loop {
             let wanted_state = cx.shared.wanted_led_state.lock(|value| {
                 *value
             });
             cx.local.led_pin.set_state(wanted_state.into());
-
-            // TODO: Is this a hack?
-            cx.shared.millis_counter.lock(|value| {
-                *value = *value + 5;
-            });
-
-            Systick::delay(5.millis()).await;
-
-            /*cx.local.state = !*cx.local.state;
-            let wanted_state = *cx.local.state;
-            cx.local.led_pin.set_state(wanted_state.into());
-            //cortex_m::asm::delay(16_000_000); // Busywait
-            Systick::delay(500.millis()).await;*/
+            Systick::delay(1.millis()).await;
         }
     }
 }
