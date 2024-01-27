@@ -204,6 +204,40 @@ fn init_logger() {
     log::set_max_level(log::LevelFilter::Info); // TODO: Adjust as needed
 }
 
+// Motor control
+
+fn set_motor_speeds(
+    pwm_left: f32,
+    pwm_right: f32,
+    motor_pwm: &mut hal::timer::PwmHz<hal::pac::TIM4, (
+        hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false>,
+        hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false>,
+        hal::timer::ChannelBuilder<hal::pac::TIM4, 2, false>,
+        hal::timer::ChannelBuilder<hal::pac::TIM4, 3, false>
+    )>
+){
+    // Motor A (connector J1) (right side; C1 > C2 = forward)
+    if pwm_right >= 0.0 {
+        motor_pwm.set_duty(hal::timer::Channel::C1,
+                (motor_pwm.get_max_duty() as f32 * (pwm_right).min(1.0)) as u16);
+        motor_pwm.set_duty(hal::timer::Channel::C2, 0);
+    } else {
+        motor_pwm.set_duty(hal::timer::Channel::C1, 0);
+        motor_pwm.set_duty(hal::timer::Channel::C2,
+                (motor_pwm.get_max_duty() as f32 * (-pwm_right).min(1.0)) as u16);
+    }
+    // Motor B (connector J2) (left side; C3 > C4 = forward)
+    if pwm_left >= 0.0 {
+        motor_pwm.set_duty(hal::timer::Channel::C3,
+                (motor_pwm.get_max_duty() as f32 * (pwm_left).min(1.0)) as u16);
+        motor_pwm.set_duty(hal::timer::Channel::C4, 0);
+    } else {
+        motor_pwm.set_duty(hal::timer::Channel::C3, 0);
+        motor_pwm.set_duty(hal::timer::Channel::C4,
+                (motor_pwm.get_max_duty() as f32 * (-pwm_left).min(1.0)) as u16);
+    }
+}
+
 // Main program
 
 #[app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [UART4, UART5, USART6])]
@@ -226,6 +260,12 @@ mod app {
         usart1_tx: stm32f4xx_hal::serial::Tx<stm32f4xx_hal::pac::USART1, u8>,
         usart1_txbuf: ConstGenericRingBuffer<u8, 1024>,
         command_accumulator: CommandAccumulator<50>,
+        motor_pwm: hal::timer::PwmHz<hal::pac::TIM4, (
+                    hal::timer::ChannelBuilder<hal::pac::TIM4, 0, false>,
+                    hal::timer::ChannelBuilder<hal::pac::TIM4, 1, false>,
+                    hal::timer::ChannelBuilder<hal::pac::TIM4, 2, false>,
+                    hal::timer::ChannelBuilder<hal::pac::TIM4, 3, false>
+                )>,
     }
 
     #[init]
@@ -288,17 +328,21 @@ mod app {
         // Motor A (connector J1) (right side; C1 > C2 = forward)
         motor_pwm.enable(hal::timer::Channel::C1);
         motor_pwm.enable(hal::timer::Channel::C2);
-        motor_pwm.set_duty(hal::timer::Channel::C1,
+        motor_pwm.set_duty(hal::timer::Channel::C1, 0);
+        motor_pwm.set_duty(hal::timer::Channel::C2, 0);
+        /*motor_pwm.set_duty(hal::timer::Channel::C1,
                 (motor_pwm.get_max_duty() as f32 * 0.1) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C2,
-                (motor_pwm.get_max_duty() as f32 * 0.0) as u16);
+                (motor_pwm.get_max_duty() as f32 * 0.0) as u16);*/
         // Motor B (connector J2) (left side; C3 > C4 = forward)
         motor_pwm.enable(hal::timer::Channel::C3);
         motor_pwm.enable(hal::timer::Channel::C4);
-        motor_pwm.set_duty(hal::timer::Channel::C3,
+        motor_pwm.set_duty(hal::timer::Channel::C3, 0);
+        motor_pwm.set_duty(hal::timer::Channel::C4, 0);
+        /*motor_pwm.set_duty(hal::timer::Channel::C3,
                 (motor_pwm.get_max_duty() as f32 * 0.1) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C4,
-                (motor_pwm.get_max_duty() as f32 * 0.0) as u16);
+                (motor_pwm.get_max_duty() as f32 * 0.0) as u16);*/
 
         // UART1
 
@@ -361,6 +405,7 @@ mod app {
                 usart1_tx: usart1_tx,
                 usart1_txbuf: ConstGenericRingBuffer::new(),
                 command_accumulator: CommandAccumulator::new(),
+                motor_pwm: motor_pwm,
             }
         )
     }
@@ -372,7 +417,10 @@ mod app {
         }
     }
 
-    #[task(priority = 1, shared = [millis_counter, wanted_led_state], local = [])]
+    #[task(priority = 1,
+        shared = [millis_counter, wanted_led_state],
+        local = [motor_pwm]
+    )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
         let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
@@ -383,6 +431,13 @@ mod app {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
             brain.update(&mut robot);
+
+            /*let motor_pwm_left = 0.1;
+            let motor_pwm_right = 0.1;*/
+            // TODO: Correct scaling
+            let motor_pwm_left = robot.wheel_speed_left * 0.002;
+            let motor_pwm_right = robot.wheel_speed_right * 0.002;
+            set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
 
             //cortex_m::asm::delay(16_000_000);
             //robot.wheel_speed_right += 1.0;
