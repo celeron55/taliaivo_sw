@@ -18,6 +18,12 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 33; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
+const ENABLE_ROBOT_WEAPON: [bool; 2] = [false, false];
+const ENABLE_ROBOT_BRAIN: [bool; 2] = [true, false];
+//const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
+const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
+const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
+
 const SIMULATE_LIDAR: bool = false;
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
 const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
@@ -254,9 +260,8 @@ impl Robot {
             let robot_orientation = body.position().rotation;
             let robot_inverse_orientation = robot_orientation.inverse();
 
-            const MASS: f32 = 0.45; // Per wheel
-            const NORMAL_FORCE: f32 = 9.81 * MASS;
-            const KINETIC_FRICTION_COEFFICIENT: f32 = 0.8;
+            const NORMAL_FORCE: f32 = ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL;
+            const KINETIC_FRICTION_COEFFICIENT: f32 = ROBOT_FRICTION_COEFFICIENT;
             // Have to multiply by 100 because we use centimeters instead of
             // meters
             let frictional_force_magnitude = KINETIC_FRICTION_COEFFICIENT * NORMAL_FORCE * 100.0;
@@ -658,14 +663,18 @@ fn main() {
                         (GROUP_ROBOT1_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())),
     ];
-    robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
-            10.0, 2.0, 0.0, point![0.0, 4.0],
-            InteractionGroups::new(
-                    (GROUP_ROBOT0_WEAPON).into(), (GROUP_ROBOT1_BODY | GROUP_ARENA).into()));
-    robots[1].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
-            8.0, 1.5, 0.0, point![0.0, 3.0],
-            InteractionGroups::new(
-                    (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
+    if ENABLE_ROBOT_WEAPON[0] {
+        robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+                10.0, 2.0, 0.0, point![0.0, 4.0],
+                InteractionGroups::new(
+                        (GROUP_ROBOT0_WEAPON).into(), (GROUP_ROBOT1_BODY | GROUP_ARENA).into()));
+    }
+    if ENABLE_ROBOT_WEAPON[0] {
+        robots[1].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
+                8.0, 1.5, 0.0, point![0.0, 3.0],
+                InteractionGroups::new(
+                        (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
+    }
 
     let mut brain = BrainState::new(0);
     let mut brain2 = BrainState::new(UPS as u32 * 2);
@@ -719,11 +728,15 @@ fn main() {
 
         if e.update_args().is_some() && !paused {
             if !slow_motion || slow_motion_counter % 5 == 0 {
-                brain.update(&mut robots[0]);
+                if ENABLE_ROBOT_BRAIN[0] {
+                    brain.update(&mut robots[0]);
+                }
 
                 match robot2_controller {
                     RobotController::Brain => {
-                        brain2.update(&mut robots[1]);
+                        if ENABLE_ROBOT_BRAIN[1] {
+                            brain2.update(&mut robots[1]);
+                        }
                     },
                     RobotController::Keyboard => {
                         keyboard_controller.control(&mut robots[1]);
