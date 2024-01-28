@@ -38,6 +38,44 @@ const GROUP_ROBOT1_BODY:   u32 = 0b00000010;
 const GROUP_ROBOT0_WEAPON: u32 = 0b00000100;
 const GROUP_ROBOT1_WEAPON: u32 = 0b00010000;
 
+struct SensorLogReader {
+    // TODO
+}
+
+impl SensorLogReader {
+    fn new(path: std::path::PathBuf) -> Self {
+        // TODO
+        SensorLogReader {
+        }
+    }
+
+    fn read(&mut self) -> [f32; 10] {
+        let mut values: [f32; 10] = [0.0; 10];
+
+        // TODO
+
+        // Proximity sensors
+        values[0] = 20.0;
+        values[1] = 20.0;
+        values[2] = 20.0;
+        values[3] = 20.0;
+        values[4] = 20.0;
+        values[5] = 20.0;
+
+        // Gyro z
+        values[6] = PI as f32 * 0.2;
+
+        // Wheel speeds
+        values[7] = 0.0;
+        values[8] = 0.0;
+
+        // Vbat
+        values[9] = 11.0;
+
+        values
+    }
+}
+
 struct Robot {
     body_handle: RigidBodyHandle,
     blade_handle: Option<RigidBodyHandle>,
@@ -614,6 +652,26 @@ impl BrainInterface for KeyboardController {
     }
 }
 
+struct DummyController {
+}
+
+impl DummyController {
+    fn new() -> Self {
+        DummyController {
+        }
+    }
+}
+
+impl BrainInterface for DummyController {
+    fn update(&mut self, robot: &mut dyn RobotInterface) {
+        robot.set_motor_speed(0.0, 0.0);
+        robot.set_weapon_throttle(0.0);
+        // Clear some diagnostic info
+        let map = Map::new();
+        robot.report_map(&map, Point2::new(0.0, 0.0), 0.0, None, None, None, &[]);
+    }
+}
+
 fn main() {
 	let cli = Cli::parse();
 
@@ -684,17 +742,27 @@ fn main() {
                         (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
     }
 
-    if let Some(log_path) = cli.replay {
-    }
+    let mut sensor_log_reader: Option<SensorLogReader> = if let Some(log_path) = cli.replay {
+        Some(SensorLogReader::new(log_path))
+    } else {
+        None
+    };
 
     let mut brain = BrainState::new(0);
     let mut brain2 = BrainState::new(UPS as u32 * 2);
+
     let mut keyboard_controller = KeyboardController::new();
+    let mut dummy_controller = DummyController::new();
     enum RobotController {
         Brain,
         Keyboard,
+        Dummy,
     }
-    let mut robot2_controller = RobotController::Brain;
+    let mut robot2_controller = if ENABLE_ROBOT_BRAIN[1] {
+        RobotController::Brain
+    } else {
+        RobotController::Dummy
+    };
 
     let mut counter: u64 = 0;
 
@@ -743,15 +811,18 @@ fn main() {
                     brain.update(&mut robots[0]);
                 }
 
-                match robot2_controller {
-                    RobotController::Brain => {
-                        if ENABLE_ROBOT_BRAIN[1] {
-                            brain2.update(&mut robots[1]);
-                        }
-                    },
-                    RobotController::Keyboard => {
-                        keyboard_controller.update(&mut robots[1]);
-                    },
+                if robots.len() >= 2 {
+                    (match robot2_controller {
+                        RobotController::Brain => {
+                            &mut brain2 as &mut dyn BrainInterface
+                        },
+                        RobotController::Keyboard => {
+                            &mut keyboard_controller as &mut dyn BrainInterface
+                        },
+                        RobotController::Dummy => {
+                            &mut dummy_controller as &mut dyn BrainInterface
+                        },
+                    }).update(&mut robots[1]);
                 }
 
                 for robot in &mut robots {
@@ -761,9 +832,47 @@ fn main() {
                     }
                 }
 
-                for robot in &mut robots {
+                if let Some(ref mut reader) = sensor_log_reader {
+                    let ref mut robot = robots[0];
+                    let sensors = reader.read();
+
+                    // TODO: sensors[9] (Vbat)
+
+                    // Update movement
+                    robot.wheel_speed_left = sensors[7];
+                    robot.wheel_speed_right = sensors[8];
                     robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
-                    robot.update_sensors(&mut query_pipeline, &collider_set, &rigid_body_set, counter);
+                    brain.force_wheel_speeds(robot.wheel_speed_left, robot.wheel_speed_right);
+
+                    // Update sensors
+                    robot.gyro_z = sensors[6];
+                    robot.proximity_sensor_readings.clear();
+                    // NOTE: The algorithm currently assumes sensors to be in this
+                    //       exact order
+                    let proximity_sensor_angles =
+                            [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+                    let adc_indexes = [2, 3, 1, 4, 0, 5];
+                    for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
+                        let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
+                        let (distance_cm, detected) = {
+                            if sensors[0] > 94.0 {
+                                (94.0, false)
+                            } else {
+                                (sensors[0], true)
+                            }
+                        };
+                        robot.proximity_sensor_readings.push((
+                                angle_rad as f32,
+                                distance_cm,
+                                detected));
+                    }
+                } else {
+                    if robots.len() >= 2 {
+                        let ref mut robot = robots[1];
+                        robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
+                        robot.update_sensors(&mut query_pipeline, &collider_set,
+                                &rigid_body_set, counter);
+                    }
                 }
 
                 physics_pipeline.step(
@@ -790,13 +899,10 @@ fn main() {
         if let Some(Button::Keyboard(key)) = e.press_args() {
             match key {
                 Key::K => {
-                    match robot2_controller {
-                        RobotController::Brain => {
-                            robot2_controller = RobotController::Keyboard;
-                        },
-                        RobotController::Keyboard => {
-                            robot2_controller = RobotController::Brain;
-                        },
+                    robot2_controller = match robot2_controller {
+                        RobotController::Brain => RobotController::Keyboard,
+                        RobotController::Dummy => RobotController::Keyboard,
+                        RobotController::Keyboard => RobotController::Brain,
                     }
                 },
                 Key::Space => {

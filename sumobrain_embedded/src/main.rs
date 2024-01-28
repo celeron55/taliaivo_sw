@@ -48,7 +48,7 @@ use core::f64::consts::PI;
 //use defmt::{panic, *};
 //use {defmt_rtt as _, panic_probe as _};
 
-use sumobrain_common::{RobotInterface, BrainState, Map};
+use sumobrain_common::{RobotInterface, BrainState, Map, BrainInterface};
 use sumobrain_common::map::HoughLine;
 
 mod command_accumulator;

@@ -44,6 +44,7 @@ pub trait RobotInterface {
     fn get_track_width(&self) -> f32;
 
     // Motor control
+    // TODO: Rename to set_wheel_speed
     fn set_motor_speed(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32);
     
     // Weapon control
@@ -68,6 +69,15 @@ pub trait RobotInterface {
             scan_p: Option<Point2<f32>>,
             wall_avoid_p: Option<Point2<f32>>,
             wall_lines: &[HoughLine]);
+}
+
+pub trait BrainInterface {
+    // Should be called at 1.0s / UPS interval
+    fn update(&mut self, robot: &mut dyn RobotInterface);
+
+    // Allows replaying movement from log files and seeing what the map looks
+    // like
+    fn force_wheel_speeds(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32) {}
 }
 
 fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
@@ -205,8 +215,7 @@ impl BrainState {
         }
     }
 
-    // Should be called at 1.0s / UPS interval
-    pub fn update(&mut self, robot: &mut dyn RobotInterface) {
+    pub fn update_internal(&mut self, robot: &mut dyn RobotInterface) {
         // Move robot closer to the center of map if it's near an edge
         if (self.pos.x - MAP_W_REAL / 2.0).abs() > MAP_W_REAL / 4.0 ||
                 (self.pos.y - MAP_H_REAL / 2.0).abs() > MAP_H_REAL / 4.0 {
@@ -247,8 +256,11 @@ impl BrainState {
         /*println!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
                 self.gyro_based_rotation_speed_filtered, self.wheel_based_rotation_speed_filtered);*/
         // TODO: Do something similar based on the accelerometer
-        let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
-                self.wheel_based_rotation_speed_filtered).abs() > PI * 1.5;
+        // TODO: Make useful and re-enable (gyro and wheel speeds have to be in
+        // reasonable sync in reality, otherwise this messes things up)
+        /*let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
+                self.wheel_based_rotation_speed_filtered).abs() > PI * 1.5;*/
+        let out_of_control_turn = false;
         if out_of_control_turn {
             self.map.global_forget(0.9);
         }
@@ -753,5 +765,16 @@ impl BrainState {
         let wanted_rotation_speed = self.steer_towards_absolute_angle(
                 target_angle_rad, max_rotation_speed);
         return (wanted_linear_speed, wanted_rotation_speed)
+    }
+}
+
+impl BrainInterface for BrainState {
+    fn update(&mut self, robot: &mut dyn RobotInterface) {
+        self.update_internal(robot);
+    }
+    
+    fn force_wheel_speeds(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32) {
+        self.applied_wheel_speed_left = left_speed_cm_s;
+        self.applied_wheel_speed_right = right_speed_cm_s;
     }
 }
