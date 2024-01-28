@@ -16,20 +16,26 @@ pub const UPS: u32 = 50; // Updates per second
 const ENEMY_HISTORY_LENGTH: usize = 50;
 
 // Arena configuration
-const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
+//const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
+const ARENA_DIMENSION: f32 = 63.0; // cm. Used to predict opposing walls.
 
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
 // don't occur on an empty arena.
-const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+//const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 //const MAX_LINEAR_SPEED: f32 = 100.0;
 //const MAX_ROTATION_SPEED: f32 = PI * 4.0;
 //const SCANNING_ROTATION_SPEED: f32 = 1.5;
 //const SCANNING_FREQUENCY: f32 = 10.0;
-const MAX_LINEAR_SPEED: f32 = 20.0;
-const MAX_ROTATION_SPEED: f32 = PI * 2.0;
+//const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 15.0;
+//const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 40.0;
+const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+const MAX_LINEAR_SPEED: f32 = 30.0;
+const MAX_ROTATION_SPEED: f32 = PI * 2.5;
 const SCANNING_ROTATION_SPEED: f32 = 1.0;
 const SCANNING_FREQUENCY: f32 = 5.0;
+const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
+const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
 
 pub trait RobotInterface {
     // Capabilities and dimensions
@@ -427,8 +433,8 @@ impl BrainState {
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
             let mut safe_linear_speed = MAX_LINEAR_SPEED;
-            let L = 30.0;
-            let L2 = 20.0;
+            let L = WALL_AVOID_DISTANCE_HEAD_ON * 0.75;
+            let L2 = WALL_AVOID_DISTANCE_HEAD_ON * 0.5;
             if d0 < L {
                 safe_linear_speed *= 0.5;
             }
@@ -449,7 +455,7 @@ impl BrainState {
             }
             return safe_linear_speed;
         } else {
-            return 50.0;
+            return MAX_LINEAR_SPEED;
         }
     }
 
@@ -540,19 +546,20 @@ impl BrainState {
         }
 
         // Avoid walls as a higher priority than scanning
-        if self.shortest_wall_distance < 15.0 ||
-                self.shortest_wall_head_on_distance < 40.0 {
+        if self.shortest_wall_distance < WALL_AVOID_DISTANCE_ANY_DIRECTION ||
+                self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON {
             //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
-            let target_p = self.pos + self.wall_avoidance_vector.normalize() * 40.0;
+            let target_p = self.pos + self.wall_avoidance_vector.normalize() *
+                    WALL_AVOID_DISTANCE_HEAD_ON;
             self.wall_avoid_p = Some(target_p);
             let max_linear_speed = self.get_wall_safe_linear_speed();
             let max_rotation_speed = MAX_ROTATION_SPEED * 0.75;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
                             target_p, max_linear_speed, max_rotation_speed, true);
-            if self.shortest_wall_head_on_distance < 20.0 {
+            if self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON * 0.5 {
                 wanted_linear_speed = -max_linear_speed * 0.2;
-            } else if self.shortest_wall_head_on_distance < 40.0 {
+            } else if self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON {
                 wanted_linear_speed = max_linear_speed * 0.05;
             }
             // Apply motor speed modulation to get scanning data
@@ -562,6 +569,10 @@ impl BrainState {
 
         // Avoid hits also with stupid logic. The wall detection is not always
         // fast enough as it requires a certain length of wall to be seen.
+        // TODO: Make this activate only when not having recently been in attack
+        // mode, because this essentially cancels an attack right when about to
+        // hit the opponent
+        /*
         if self.proximity_sensor_readings.len() >= 6 {
             let d0 = self.proximity_sensor_readings[0].1;
             let d1 = self.proximity_sensor_readings[1].1;
@@ -573,23 +584,23 @@ impl BrainState {
             // all are showing short distance, don't try to push further
             let mut wanted_linear_speed = 0.0;
             let mut wanted_rotation_speed = PI * 0.0;
-            let d = 15.0;
+            let d = WALL_AVOID_DISTANCE_ANY_DIRECTION;
             if d0 < d {
                 //println!("Stupid hit avoidance logic: Reverse");
-                wanted_linear_speed = -50.0;
-            }
-            if d1 < d {
-                //println!("Stupid hit avoidance logic: Turn right");
-                wanted_rotation_speed = PI * 2.0;
-            }
-            if d2 < d {
+                wanted_linear_speed = -MAX_LINEAR_SPEED * 0.5;
+            } else if d2 < d {
+                // NOTE: Prefer turning left
                 //println!("Stupid hit avoidance logic: Turn left");
-                wanted_rotation_speed = PI * -2.0;
+                wanted_rotation_speed = -MAX_ROTATION_SPEED * 0.5;
+            } else if d1 < d {
+                //println!("Stupid hit avoidance logic: Turn right");
+                wanted_rotation_speed = MAX_ROTATION_SPEED * 0.5;
             }
             if wanted_linear_speed != 0.0 || wanted_rotation_speed != 0.0 {
                 return (wanted_linear_speed, wanted_rotation_speed);
             }
         }
+        */
 
         //println!("scan");
         self.attack_step_count = 0;
@@ -665,10 +676,16 @@ impl BrainState {
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
-        //let wanted_linear_speed = 100.0;
-        //let wanted_rotation_speed = PI * 1.0;
+        // Nothing better to do than just rotate around in-place
         let wanted_linear_speed = 0.0;
-        let wanted_rotation_speed = MAX_ROTATION_SPEED * 3.0 / 4.0;
+        //let wanted_rotation_speed = -MAX_ROTATION_SPEED * 3.0 / 4.0;
+        /*let wanted_rotation_speed = MAX_ROTATION_SPEED * 3.0 / 4.0 *
+                (self.counter as f32 / UPS as f32 * 1.0).sin();*/
+        let wanted_rotation_speed = if ((self.counter / UPS as u64 / 2) % 2) == 0 {
+            MAX_ROTATION_SPEED * 3.0 / 4.0
+        } else {
+            -MAX_ROTATION_SPEED * 3.0 / 4.0
+        };
         return (wanted_linear_speed, wanted_rotation_speed);
     }
 

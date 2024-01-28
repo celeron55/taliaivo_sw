@@ -635,14 +635,25 @@ fn main() {
     let physics_hooks = ();
     let event_handler = ();
 
+    //let asize = 125.0 + 5.0;
+    let asize = 63.0 + 5.0;
+    let ad = 10.0;
+    let at = 5.0;
+    let arena_walls = vec![
+        ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad, asize, at),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad, ad+asize/2.0, at, asize),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize, ad+asize/2.0, at, asize),
+	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
+    ];
+
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                100.0, 100.0, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 0.0,
+                asize*0.8, asize*0.8, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ROBOT0_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT1_BODY | GROUP_ROBOT1_WEAPON).into())),
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                120.0, 100.0, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
+                asize*0.96, asize*0.96, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ROBOT1_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())),
@@ -655,17 +666,6 @@ fn main() {
             8.0, 1.5, 0.0, point![0.0, 3.0],
             InteractionGroups::new(
                     (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
-
-    let asize = 125.0 + 5.0;
-    let ad = 10.0;
-    let at = 5.0;
-    let arena_walls = vec![
-        ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad, asize, at),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad, ad+asize/2.0, at, asize),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize, ad+asize/2.0, at, asize),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
-        // Repeat for other walls
-    ];
 
     let mut brain = BrainState::new(0);
     let mut brain2 = BrainState::new(UPS as u32 * 2);
