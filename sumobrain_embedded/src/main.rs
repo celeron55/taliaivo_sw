@@ -57,6 +57,7 @@ use command_accumulator::CommandAccumulator;
 const MAX_PWM: f32 = 0.40;
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
 const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
+const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
 
 struct Robot {
     wheel_speed_left: f32,
@@ -225,6 +226,10 @@ const ADC_NUM_CHANNELS: usize = 7;
 type AdcDmaTransfer = Transfer<Stream0<DMA2>, 0, Adc<ADC1>, PeripheralToMemory,
         &'static mut [u16; ADC_NUM_CHANNELS]>;
 
+fn adc_scale_vbat(raw: u16) -> f32 {
+    return raw as f32 / 4096.0 * (1.0+100.0/4.7) * 3.3;
+}
+
 // Motor control
 
 type MotorPwm = hal::timer::PwmHz<hal::pac::TIM4, (
@@ -285,7 +290,7 @@ mod app {
         adc_result: [u16; ADC_NUM_CHANNELS],
         drive_mode: DriveMode,
         vbat_lowpass: f32,
-        log_proximity: bool,
+        log_sensors: bool,
     }
 
     #[local]
@@ -395,7 +400,13 @@ mod app {
         let mut mpu = Mpu6050::new_with_addr(mpu_i2c, 0x69); // AD0 looks to be high
         let mut syst = {
             let mut delay = cortex_m::delay::Delay::new(cx.core.SYST, 168_000_000);
+
+            // MPU6050 takes some time to boot after applying power
+            // When tested, 0ms isn't enough, but 10ms was enough
+            delay.delay_ms(20);
+
             mpu.init(&mut delay);
+
             delay.free() // Return SYST peripheral for other uses
         };
         mpu.set_clock_source(mpu6050::device::CLKSEL::GZAXIS);
@@ -515,7 +526,7 @@ mod app {
                 adc_result: [0; ADC_NUM_CHANNELS],
                 drive_mode: DriveMode::Normal,
                 vbat_lowpass: 0.0,
-                log_proximity: false,
+                log_sensors: false,
             },
             Local {
                 led_pin: led_pin,
@@ -545,11 +556,46 @@ mod app {
             adc_result,
             drive_mode,
             vbat_lowpass,
-            log_proximity,
+            log_sensors,
         ],
-        local = [motor_pwm, mpu]
+        local = [
+            motor_pwm,
+            mpu,
+        ]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
+        // Figure out what drive mode to go into initially
+        {
+            // Wait for a bit
+            Systick::delay(10.millis()).await;
+
+            // Start ADC
+            cx.shared.adc_transfer.lock(|transfer| {
+                transfer.start(|adc| {
+                    adc.start_conversion();
+                });
+            });
+
+            // Wait for a bit
+            Systick::delay(10.millis()).await;
+
+            // Now we can check the battery voltage and determine whether we're
+            // being powered by:
+            // - a programming set-up
+            //   -> Go into stop mode
+            // - cold start by main switch
+            //   -> Go into normal mode
+            let vbat = cx.shared.adc_result.lock(|adc_result| {
+                    adc_scale_vbat(adc_result[6]) });
+            let initial_mode = if vbat < 6.0 {
+                DriveMode::Stop
+            } else {
+                DriveMode::Normal
+            };
+            cx.shared.drive_mode.lock(|v| { *v = initial_mode; });
+            info!("-!- Selected initial mode: {:?}", initial_mode);
+        }
+
         let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
 
@@ -558,14 +604,18 @@ mod app {
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
+            let mut vbat = 0.0;
+            let mut vbat_lowpass = 0.0;
+
             cx.shared.adc_result.lock(|adc_result| {
                 // Monitor Vbat
                 // 100k:4.7k resistor divider, 3.3V reference
-                let vbat = adc_result[6] as f32 / 4096.0 * (1.0+100.0/4.7) * 3.3;
-                cx.shared.vbat_lowpass.lock(|vbat_lowpass| {
+                vbat = adc_scale_vbat(adc_result[6]);
+                vbat_lowpass = cx.shared.vbat_lowpass.lock(|vbat_lowpass| {
                     *vbat_lowpass = *vbat_lowpass * 0.95 + vbat * 0.05;
                     robot.battery_voltage = *vbat_lowpass;
                     //info!("Vbat = {:?} V", *vbat_lowpass);
+                    *vbat_lowpass
                 });
 
                 // Convert proximity sensor readings
@@ -574,36 +624,23 @@ mod app {
                 //       exact order
                 let proximity_sensor_angles =
                         [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
-                // TODO: Check that there isn't a mixup between left and right
-                //       (currently it's assumed -90 = right)
                 let adc_indexes = [2, 3, 1, 4, 0, 5];
                 for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                     let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                     let raw = adc_result[adc_indexes[i]];
                     let (distance_cm, detected) = {
-                        if raw < 190 {
-                            (99.0, false)
+                        if raw < 220 {
+                            (90.0, false)
                         } else {
-                            ((18000.0 / raw as f32).max(5.5), true)
+                            ((15000.0 / raw as f32).max(5.5), true)
                         }
                     };
-                    robot.proximity_sensor_readings.push(
-                            (angle_rad as f32, distance_cm, detected));
+                    robot.proximity_sensor_readings.push((
+                            angle_rad as f32,
+                            distance_cm + SENSOR_MOUNT_RADIUS_CM,
+                            detected));
                 }
             });
-
-            let log_proximity = cx.shared.log_proximity.lock(|v|{ *v });
-            if log_proximity {
-                if robot.proximity_sensor_readings.len() >= 6 {
-                    info!("Proximity: {:.0} {:.0} {:.0} {:.0} {:.0} {:.0} (cm)",
-                            robot.proximity_sensor_readings[0].1,
-                            robot.proximity_sensor_readings[1].1,
-                            robot.proximity_sensor_readings[2].1,
-                            robot.proximity_sensor_readings[3].1,
-                            robot.proximity_sensor_readings[4].1,
-                            robot.proximity_sensor_readings[5].1);
-                }
-            }
 
             let acc = cx.local.mpu.get_acc();
             //info!("MPU6050: acc: {:?}", acc);
@@ -616,6 +653,28 @@ mod app {
                 robot.gyro = Vector3::new(gyro.x, gyro.y, gyro.z);
             }
 
+            let log_sensors = cx.shared.log_sensors.lock(|v|{ *v });
+            if log_sensors {
+                let mut values: [f32; 10] = [0.0; 10];
+                if robot.proximity_sensor_readings.len() >= 6 {
+                    values[0] = robot.proximity_sensor_readings[0].1;
+                    values[1] = robot.proximity_sensor_readings[1].1;
+                    values[2] = robot.proximity_sensor_readings[2].1;
+                    values[3] = robot.proximity_sensor_readings[3].1;
+                    values[4] = robot.proximity_sensor_readings[4].1;
+                    values[5] = robot.proximity_sensor_readings[5].1;
+                }
+                values[6] = robot.gyro.z;
+                values[7] = robot.wheel_speed_left;
+                values[8] = robot.wheel_speed_right;
+                values[9] = vbat;
+                info!("S,{:.0},{:.0},{:.0},{:.0},{:.0},{:.0},{:.1},{:.0},{:.0},{:.1}",
+                        values[0], values[1], values[2],
+                        values[3], values[4], values[5],
+                        values[6], values[7], values[8],
+                        values[9]);
+            }
+
             brain.update(&mut robot);
 
             //info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
@@ -623,7 +682,6 @@ mod app {
             let drive_mode = cx.shared.drive_mode.lock(|v| { *v });
             //info!("drive_mode: {:?}", drive_mode);
 
-            let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
             if vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
                 set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
             } else if drive_mode == DriveMode::MotorTest {
@@ -689,12 +747,44 @@ mod app {
         }
     }
 
-    #[task(priority = 2, shared = [wanted_led_state], local = [led_pin])]
+    #[task(priority = 2,
+        shared = [
+            wanted_led_state,
+            vbat_lowpass,
+            drive_mode
+        ],
+        local = [led_pin]
+    )]
     async fn led_task(mut cx: led_task::Context) {
         loop {
-            let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
-            cx.local.led_pin.set_state(wanted_state.into());
-            Systick::delay(1.millis()).await;
+            let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
+            let drive_mode = cx.shared.drive_mode.lock(|v| { *v });
+            if drive_mode == DriveMode::Normal {
+                if vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
+                    cx.local.led_pin.set_state(true.into());
+                    Systick::delay(100.millis()).await;
+                    cx.local.led_pin.set_state(false.into());
+                    Systick::delay(100.millis()).await;
+                }
+            } else if drive_mode == DriveMode::Stop {
+                cx.local.led_pin.set_state(true.into());
+                Systick::delay(100.millis()).await;
+                cx.local.led_pin.set_state(false.into());
+                Systick::delay(900.millis()).await;
+            } else if drive_mode == DriveMode::MotorTest {
+                cx.local.led_pin.set_state(true.into());
+                Systick::delay(100.millis()).await;
+                cx.local.led_pin.set_state(false.into());
+                Systick::delay(100.millis()).await;
+                cx.local.led_pin.set_state(true.into());
+                Systick::delay(100.millis()).await;
+                cx.local.led_pin.set_state(false.into());
+                Systick::delay(700.millis()).await;
+            } else {
+                let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
+                cx.local.led_pin.set_state(wanted_state.into());
+                Systick::delay(1.millis()).await;
+            }
         }
     }
 
@@ -705,7 +795,7 @@ mod app {
             wanted_led_state,
             drive_mode,
             vbat_lowpass,
-            log_proximity,
+            log_sensors,
         ],
         local = [command_accumulator]
     )]
@@ -731,15 +821,19 @@ mod app {
                     } else if command == ArrayString::from("bat").unwrap() {
                         let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
                         info!("Battery voltage: {:?}", cx.shared.vbat_lowpass.lock(|v| { *v }));
-                    } else if command == ArrayString::from("prox").unwrap() {
-                        let log_proximity = cx.shared.log_proximity.lock(|v|{ *v = !*v; *v });
-                        info!("Proximity logging: {:?}", log_proximity);
+                    } else if command == ArrayString::from("log").unwrap() {
+                        let log_sensors = cx.shared.log_sensors.lock(|v|{ *v = !*v; *v });
+                        info!("Sensor logging: {:?}", log_sensors);
+                        if log_sensors {
+                            info!("S,P0,P1,P2,P3,P4,P5,GZ,WL,WR,VB");
+                        }
                     } else {
                         info!("-> {:?} is an unknown command", command);
                         info!("Available commands:");
                         info!("  normal");
                         info!("  test");
                         info!("  stop");
+                        info!("  log");
                         info!("  bat");
                     }
                     // Flash LED for debugging
