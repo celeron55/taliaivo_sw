@@ -267,6 +267,13 @@ fn set_motor_speeds(
 mod app {
     use super::*;
 
+    #[derive(Copy, Clone, Debug, PartialEq)]
+    pub enum DriveMode {
+        Normal,
+        MotorTest,
+        Stop,
+    }
+
     #[shared]
     struct Shared {
         millis_counter: u64,
@@ -276,6 +283,8 @@ mod app {
         usb_serial: usbd_serial::SerialPort<'static, otg_fs::UsbBusType>,
         adc_transfer: AdcDmaTransfer,
         adc_result: [u16; ADC_NUM_CHANNELS],
+        drive_mode: DriveMode,
+        vbat_lowpass: f32,
     }
 
     #[local]
@@ -288,7 +297,6 @@ mod app {
         motor_pwm: MotorPwm,
         adc_buffer: Option<&'static mut [u16; ADC_NUM_CHANNELS]>,
         mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
-        vbat_lowpass: f32,
     }
 
     #[init(
@@ -504,6 +512,8 @@ mod app {
                 usb_serial: usb_serial,
                 adc_transfer: adc_transfer,
                 adc_result: [0; ADC_NUM_CHANNELS],
+                drive_mode: DriveMode::Normal,
+                vbat_lowpass: 0.0,
             },
             Local {
                 led_pin: led_pin,
@@ -514,7 +524,6 @@ mod app {
                 motor_pwm: motor_pwm,
                 adc_buffer: Some(cx.local.adc_buffer2),
                 mpu: mpu,
-                vbat_lowpass: 0.0,
             }
         )
     }
@@ -527,8 +536,15 @@ mod app {
     }
 
     #[task(priority = 1,
-        shared = [millis_counter, wanted_led_state, adc_transfer, adc_result],
-        local = [motor_pwm, mpu, vbat_lowpass]
+        shared = [
+            millis_counter,
+            wanted_led_state,
+            adc_transfer,
+            adc_result,
+            drive_mode,
+            vbat_lowpass
+        ],
+        local = [motor_pwm, mpu]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
         let mut brain = BrainState::new(0);
@@ -543,9 +559,11 @@ mod app {
                 // Monitor Vbat
                 // 100k:4.7k resistor divider, 3.3V reference
                 let vbat = adc_result[6] as f32 / 4096.0 * (1.0+100.0/4.7) * 3.3;
-                *cx.local.vbat_lowpass = *cx.local.vbat_lowpass * 0.95 + vbat * 0.05;
-                robot.battery_voltage = *cx.local.vbat_lowpass;
-                //info!("Vbat = {:?} V", cx.local.vbat_lowpass);
+                cx.shared.vbat_lowpass.lock(|vbat_lowpass| {
+                    *vbat_lowpass = *vbat_lowpass * 0.95 + vbat * 0.05;
+                    robot.battery_voltage = *vbat_lowpass;
+                    //info!("Vbat = {:?} V", *vbat_lowpass);
+                });
 
                 // Convert proximity sensor readings
                 robot.proximity_sensor_readings.clear();
@@ -587,9 +605,24 @@ mod app {
 
             //info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
 
-            if *cx.local.vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
+            let drive_mode = cx.shared.drive_mode.lock(|v| { *v });
+            //info!("drive_mode: {:?}", drive_mode);
+
+            let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
+            if vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
                 set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
-            } else {
+            } else if drive_mode == DriveMode::MotorTest {
+                // Theoretical basis for scaling:
+                // -> Wheel speed is 514/60*pi*2*3.6 = 194cm/s @ 100% PWM
+                // -> Test speed: Wheel should spin at 2r/s at 120/514 = 23.3% PWM.
+                //    This should be the equivalent of 2*pi*2*3.6 = 45cm/s
+                //    Tested to match reality on 2024-01-28
+                //    * Comment: There isn't much torque, the wheels can almost stop
+                //      rotating at some friction spots of the drivetrain
+                let motor_pwm_left = 0.233;
+                let motor_pwm_right = 0.233;
+                set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
+            } else if drive_mode == DriveMode::Normal {
                 // Theoretical basis for scaling:
                 // * Wheel speeds are specified in cm/s
                 // * Wheel diameters are 36mm
@@ -601,17 +634,15 @@ mod app {
                 // -> Wheel speed is 514/60*pi*2*3.6 = 194cm/s @ 100% PWM
                 // -> Conversion factor from cm/s to PWM is 1.0/194 = 0.00515
                 //    * This is boosted by a bit to overcome friction
-                // -> Test speed: Wheel should spin at 2r/s at 120/514 = 23.3% PWM.
-                //    This should be the equivalent of 2*pi*2*3.6 = 45cm/s
-                //    Tested to match reality on 2024-01-28
-                //    * Comment: There isn't much torque, the wheels can almost stop
-                //      rotating at some friction spots of the drivetrain
-                //let motor_pwm_left = 0.233;
-                //let motor_pwm_right = 0.233;
                 let cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
                 let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
                 let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
                 set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
+                let motor_pwm_left = 0.233;
+                let motor_pwm_right = 0.233;
+                set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
+            } else {
+                set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
             }
 
             // Toggle LED for debugging
@@ -654,7 +685,12 @@ mod app {
 
     #[task(
         priority = 1,
-        shared = [console_rxbuf, wanted_led_state],
+        shared = [
+            console_rxbuf,
+            wanted_led_state,
+            drive_mode,
+            vbat_lowpass,
+        ],
         local = [command_accumulator]
     )]
     async fn console_command_task(mut cx: console_command_task::Context) {
@@ -667,9 +703,30 @@ mod app {
                 //info!("Received byte: {:?} = {:?}", b, b as char);
                 if let Some(command) = cx.local.command_accumulator.put(b as char) {
                     info!("Command: {:?}", command);
-                    // TODO: Implement commands
-                    // Toggle LED for debugging
-                    cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
+                    if command == ArrayString::from("test").unwrap() {
+                        cx.shared.drive_mode.lock(|v| { *v = DriveMode::MotorTest });
+                        info!("Drive mode: {:?}", cx.shared.drive_mode.lock(|v| { *v }));
+                    } else if command == ArrayString::from("normal").unwrap() {
+                        cx.shared.drive_mode.lock(|v| { *v = DriveMode::Normal });
+                        info!("Drive mode: {:?}", cx.shared.drive_mode.lock(|v| { *v }));
+                    } else if command == ArrayString::from("stop").unwrap() {
+                        cx.shared.drive_mode.lock(|v| { *v = DriveMode::Stop });
+                        info!("Drive mode: {:?}", cx.shared.drive_mode.lock(|v| { *v }));
+                    } else if command == ArrayString::from("bat").unwrap() {
+                        let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
+                        info!("Battery voltage: {:?}", cx.shared.vbat_lowpass.lock(|v| { *v }));
+                    } else {
+                        info!("-> {:?} is an unknown command", command);
+                        info!("Available commands:");
+                        info!("  normal");
+                        info!("  test");
+                        info!("  stop");
+                        info!("  bat");
+                    }
+                    // Flash LED for debugging
+                    cx.shared.wanted_led_state.lock(|value| { *value = false; });
+                    Systick::delay(50.millis()).await;
+                    cx.shared.wanted_led_state.lock(|value| { *value = true; });
                 }
             }
         }
