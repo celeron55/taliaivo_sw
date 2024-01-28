@@ -1,16 +1,15 @@
-extern crate piston_window;
-extern crate rapier2d;
-extern crate sumobrain_common;
-extern crate arrayvec; // Use static arrays like the embedded code
-
 use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
-use sumobrain_common::{RobotInterface, BrainState, Map};
+use sumobrain_common::{RobotInterface, BrainState, Map, BrainInterface};
 use arrayvec::ArrayVec;
 use sumobrain_common::map::HoughLine;
 use rand::distributions::{Distribution, Uniform};
+
+mod cli;
+use cli::Cli;
+use clap::Parser;
 
 const FPS: u64 = 120;
 const UPS: u64 = sumobrain_common::UPS as u64;
@@ -577,41 +576,47 @@ impl KeyboardController {
             }
         }
     }
+}
 
-    fn control(&self, robot: &mut Robot) {
+impl BrainInterface for KeyboardController {
+    fn update(&mut self, robot: &mut dyn RobotInterface) {
         let speed = 100.0;
         let turn_speed = 35.0;
-        robot.wheel_speed_left = 0.0;
-        robot.wheel_speed_right = 0.0;
+
+        let mut wheel_speed_left = 0.0;
+        let mut wheel_speed_right = 0.0;
         if self.up {
-            robot.wheel_speed_left += speed;
-            robot.wheel_speed_right += speed;
+            wheel_speed_left += speed;
+            wheel_speed_right += speed;
         }
         if self.down {
-            robot.wheel_speed_left -= speed;
-            robot.wheel_speed_right -= speed;
+            wheel_speed_left -= speed;
+            wheel_speed_right -= speed;
         }
         if self.left {
             // FIXME: This seems backwards
-            robot.wheel_speed_left += turn_speed;
-            robot.wheel_speed_right -= turn_speed;
+            wheel_speed_left += turn_speed;
+            wheel_speed_right -= turn_speed;
         }
         if self.right {
             // FIXME: This seems backwards
-            robot.wheel_speed_left -= turn_speed;
-            robot.wheel_speed_right += turn_speed;
+            wheel_speed_left -= turn_speed;
+            wheel_speed_right += turn_speed;
         }
 
-        robot.weapon_throttle = if self.t_toggle { 100.0 } else { 0.0 };
+        robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+
+        robot.set_weapon_throttle(if self.t_toggle { 100.0 } else { 0.0 });
 
         // Clear some diagnostic info
-        robot.diagnostic_attack_p = None;
-        robot.diagnostic_scan_p = None;
-        robot.diagnostic_wall_avoid_p = None;
+        let map = Map::new();
+        robot.report_map(&map, Point2::new(0.0, 0.0), 0.0, None, None, None, &[]);
     }
 }
 
 fn main() {
+	let cli = Cli::parse();
+
     let mut window: PistonWindow = WindowSettings::new("Sumobrain Simulator", [1200, 600])
         .exit_on_esc(true)
         .build()
@@ -640,16 +645,17 @@ fn main() {
     let physics_hooks = ();
     let event_handler = ();
 
-    //let asize = 125.0 + 5.0;
-    let asize = 63.0 + 5.0;
+    let asize = 5.0 + cli.arena_size;
     let ad = 10.0;
     let at = 5.0;
     let arena_walls = vec![
         ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad, asize, at),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad, ad+asize/2.0, at, asize),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize, ad+asize/2.0, at, asize),
-	    ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
+        ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad, ad+asize/2.0, at, asize),
+        ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize, ad+asize/2.0, at, asize),
+        ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
     ];
+
+    let enable_second_robot = match cli.replay { Some(_) => false, _ => true };
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
@@ -657,23 +663,28 @@ fn main() {
                 InteractionGroups::new(
                         (GROUP_ROBOT0_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT1_BODY | GROUP_ROBOT1_WEAPON).into())),
-        Robot::new(&mut rigid_body_set, &mut collider_set,
+    ];
+    if enable_second_robot {
+        robots.push(Robot::new(&mut rigid_body_set, &mut collider_set,
                 asize*0.96, asize*0.96, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ROBOT1_BODY).into(),
-                        (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())),
-    ];
-    if ENABLE_ROBOT_WEAPON[0] {
+                        (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())));
+    }
+    if robots.len() >= 1 && ENABLE_ROBOT_WEAPON[0] {
         robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
                 10.0, 2.0, 0.0, point![0.0, 4.0],
                 InteractionGroups::new(
                         (GROUP_ROBOT0_WEAPON).into(), (GROUP_ROBOT1_BODY | GROUP_ARENA).into()));
     }
-    if ENABLE_ROBOT_WEAPON[0] {
+    if robots.len() >= 2 && ENABLE_ROBOT_WEAPON[0] {
         robots[1].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
                 8.0, 1.5, 0.0, point![0.0, 3.0],
                 InteractionGroups::new(
                         (GROUP_ROBOT1_WEAPON).into(), (GROUP_ROBOT0_BODY | GROUP_ARENA).into()));
+    }
+
+    if let Some(log_path) = cli.replay {
     }
 
     let mut brain = BrainState::new(0);
@@ -739,7 +750,7 @@ fn main() {
                         }
                     },
                     RobotController::Keyboard => {
-                        keyboard_controller.control(&mut robots[1]);
+                        keyboard_controller.update(&mut robots[1]);
                     },
                 }
 
