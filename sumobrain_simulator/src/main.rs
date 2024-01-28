@@ -55,30 +55,25 @@ impl SensorLogReader {
         let reader = io::BufReader::new(file);
         let mut value_lines = vec![];
         for line in reader.lines().flatten() {
+            // Possible line formats:
+            //   "[INFO] S,12,29,10,44,20,10,0.6,0,0,4.2"
+            //   "S,12,29,10,44,20,10,0.6,0,0,4.2"
+            // Anything else should be ignored.
+
             println!("{:?}", line);
-            // TODO: Fill in values based on parsed line
 
-            let mut values: [f32; SENSOR_LOG_NUM_VALUES] = [0.0; SENSOR_LOG_NUM_VALUES];
+            let floats = line.split(",").filter_map(|s| s.parse::<f32>().ok()).collect::<Vec<_>>();
 
-            // Proximity sensors
-            values[0] = 20.0;
-            values[1] = 20.0;
-            values[2] = 20.0;
-            values[3] = 20.0;
-            values[4] = 20.0;
-            values[5] = 20.0;
+            //println!("-> {:?}", floats);
 
-            // Gyro z
-            values[6] = PI as f32 * 0.2;
-
-            // Wheel speeds
-            values[7] = 0.0;
-            values[8] = 0.0;
-
-            // Vbat
-            values[9] = 11.0;
-
-            value_lines.push(values);
+            if floats.len() == SENSOR_LOG_NUM_VALUES {
+                let mut values: [f32; SENSOR_LOG_NUM_VALUES] = [0.0; SENSOR_LOG_NUM_VALUES];
+                for i in 0..SENSOR_LOG_NUM_VALUES {
+                    values[i] = floats[i];
+                }
+                println!("-> {:?}", values);
+                value_lines.push(values);
+            }
         }
         SensorLogReader {
             value_lines: value_lines,
