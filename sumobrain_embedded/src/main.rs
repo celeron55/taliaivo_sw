@@ -573,10 +573,10 @@ mod app {
                 // NOTE: The algorithm currently assumes sensors to be in this
                 //       exact order
                 let proximity_sensor_angles =
-                        [0.0, 45.0, -45.0, 90.0, -90.0, 180.0];
+                        [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
                 // TODO: Check that there isn't a mixup between left and right
                 //       (currently it's assumed -90 = right)
-                let adc_indexes = [2, 1, 3, 0, 4, 5];
+                let adc_indexes = [2, 3, 1, 4, 0, 5];
                 for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                     let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                     let raw = adc_result[adc_indexes[i]];
