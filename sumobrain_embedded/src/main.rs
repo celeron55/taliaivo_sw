@@ -31,7 +31,7 @@ use usbd_serial;
 use mpu6050::{Mpu6050, Mpu6050Error};
 
 use arrayvec::{ArrayVec, ArrayString};
-use nalgebra::{Vector2, Point2, Rotation2};
+use nalgebra::{Vector2, Point2, Rotation2, Vector3};
 use core::cell::RefCell;
 use core::ops::DerefMut;
 use core::fmt::Write; // For ArrayString
@@ -58,6 +58,8 @@ struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
     proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
+    acc: Vector3<f32>,
+    gyro: Vector3<f32>,
 }
 
 impl Robot {
@@ -66,6 +68,8 @@ impl Robot {
             wheel_speed_left: 0.0,
             wheel_speed_right: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
+            acc: Vector3::new(0.0, 0.0, 0.0),
+            gyro: Vector3::new(0.0, 0.0, 0.0),
         }
     }
 }
@@ -106,13 +110,13 @@ impl RobotInterface for Robot {
     }
     // X, Y, Z axis values
     fn get_gyroscope_reading(&self) -> (f32, f32, f32) {
-        // TODO (at least z)
-        return (0.0, 0.0, 0.0);
+        // TODO: Check polarity of each axis
+        return (self.gyro.x, self.gyro.y, self.gyro.z);
     }
     // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32) {
-        // TODO
-        return (0.0, 0.0, 0.0);
+        // TODO: Check polarity and scaling of each axis
+        return (self.acc.x, self.acc.y, self.acc.z);
     }
     // Voltages of individual cells
     fn get_battery_cell_voltages(&self, _values: &mut[&f32]) {
@@ -358,7 +362,7 @@ mod app {
         // - Accelerating backwards: (-1, 0, -1)
         // - Accelerating left: (0, -1, -1)
         // Gyro:
-        // - Turning left: (0, 0, -1)
+        // - Turning left: (0, 0, -1) (Z=-1=left is what the algorithm expects)
         // - Turning right: (0, 0, 1)
         // - Flipping left: (-1, 0, 0)
         // - Flipping right: (1, 0, 0)
@@ -552,9 +556,14 @@ mod app {
 
             let acc = cx.local.mpu.get_acc();
             //info!("MPU6050: acc: {:?}", acc);
+            if let Ok(acc) = acc {
+                robot.acc = Vector3::new(acc.x, acc.y, acc.z);
+            }
             let gyro = cx.local.mpu.get_gyro();
             //info!("MPU6050: gyro: {:?}", gyro);
-            // TODO: Use these values from MPU6050
+            if let Ok(gyro) = gyro {
+                robot.gyro = Vector3::new(gyro.x, gyro.y, gyro.z);
+            }
 
             brain.update(&mut robot);
 
