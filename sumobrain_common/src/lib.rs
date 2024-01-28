@@ -37,6 +37,8 @@ const SCANNING_FREQUENCY: f32 = 5.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
 
+const MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE: f32 = 3.2;
+
 pub trait RobotInterface {
     // Capabilities and dimensions
     fn get_track_width(&self) -> f32;
@@ -55,7 +57,7 @@ pub trait RobotInterface {
     fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32, bool), 6>; // Returns a list of (angle (radians), distance (cm), something_seen) tuples for each sensor
     fn get_gyroscope_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
-    fn get_battery_cell_voltages(&self, values: &mut[&f32]); // Voltages of individual cells
+    fn get_battery_min_cell_voltage(&self) -> f32;
 
     // LED control
     fn set_led_status(&mut self, status: bool);
@@ -410,6 +412,13 @@ impl BrainState {
         let wanted_difference = wanted_wheel_speed_left - wanted_wheel_speed_right;
         self.applied_wheel_speed_left = avg_applied_speed + wanted_difference / 2.0;
         self.applied_wheel_speed_right = avg_applied_speed - wanted_difference / 2.0;
+
+        // Stop driving if battery is too low
+        let min_battery_cell_v = robot.get_battery_min_cell_voltage();
+        if min_battery_cell_v < MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE {
+            self.applied_wheel_speed_left = 0.0;
+            self.applied_wheel_speed_right = 0.0;
+        }
 
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 

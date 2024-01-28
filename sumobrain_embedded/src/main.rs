@@ -56,6 +56,7 @@ use command_accumulator::CommandAccumulator;
 
 const MAX_PWM: f32 = 0.40;
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
+const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
 
 struct Robot {
     wheel_speed_left: f32,
@@ -63,6 +64,7 @@ struct Robot {
     proximity_sensor_readings: ArrayVec<(f32, f32, bool), 6>,
     acc: Vector3<f32>,
     gyro: Vector3<f32>,
+    battery_voltage: f32,
 }
 
 impl Robot {
@@ -73,6 +75,7 @@ impl Robot {
             proximity_sensor_readings: ArrayVec::new(),
             acc: Vector3::new(0.0, 0.0, 0.0),
             gyro: Vector3::new(0.0, 0.0, 0.0),
+            battery_voltage: 0.0,
         }
     }
 }
@@ -122,8 +125,8 @@ impl RobotInterface for Robot {
         return (self.acc.x, self.acc.y, self.acc.z);
     }
     // Voltages of individual cells
-    fn get_battery_cell_voltages(&self, _values: &mut[&f32]) {
-        // TODO
+    fn get_battery_min_cell_voltage(&self) -> f32 {
+        return self.battery_voltage / 3.0; // 3S
     }
 
     // LED control
@@ -218,7 +221,7 @@ fn init_logger() {
 
 // ADC DMA
 
-const ADC_NUM_CHANNELS: usize = 6;
+const ADC_NUM_CHANNELS: usize = 7;
 type AdcDmaTransfer = Transfer<Stream0<DMA2>, 0, Adc<ADC1>, PeripheralToMemory,
         &'static mut [u16; ADC_NUM_CHANNELS]>;
 
@@ -285,6 +288,7 @@ mod app {
         motor_pwm: MotorPwm,
         adc_buffer: Option<&'static mut [u16; ADC_NUM_CHANNELS]>,
         mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
+        vbat_lowpass: f32,
     }
 
     #[init(
@@ -312,6 +316,7 @@ mod app {
 
         let gpioa = cx.device.GPIOA.split();
         let gpiob = cx.device.GPIOB.split();
+        let gpioc = cx.device.GPIOC.split();
         let gpiod = cx.device.GPIOD.split();
 
         let mut led_pin = gpioa.pa8.into_push_pull_output();
@@ -450,11 +455,12 @@ mod app {
         let adc1_c3 = gpioa.pa3.into_analog();
         let adc1_c4 = gpioa.pa4.into_analog();
         let adc1_c5 = gpioa.pa5.into_analog();
+        let adc1_c14 = gpioc.pc4.into_analog();
 
         let adc_config = AdcConfig::default()
             .dma(Dma::Continuous)
             .scan(Scan::Enabled)
-            .resolution(Resolution::Ten)
+            .resolution(Resolution::Twelve)
             .clock(Clock::Pclk2_div_8);
 
         let mut adc = Adc::adc1(cx.device.ADC1, true, adc_config);
@@ -464,6 +470,7 @@ mod app {
         adc.configure_channel(&adc1_c3, Sequence::Four, SampleTime::Cycles_480);
         adc.configure_channel(&adc1_c4, Sequence::Five, SampleTime::Cycles_480);
         adc.configure_channel(&adc1_c5, Sequence::Six, SampleTime::Cycles_480);
+        adc.configure_channel(&adc1_c14, Sequence::Seven, SampleTime::Cycles_480);
 
         let dma = StreamsTuple::new(cx.device.DMA2);
         let dma_config = DmaConfig::default()
@@ -507,6 +514,7 @@ mod app {
                 motor_pwm: motor_pwm,
                 adc_buffer: Some(cx.local.adc_buffer2),
                 mpu: mpu,
+                vbat_lowpass: 0.0,
             }
         )
     }
@@ -520,7 +528,7 @@ mod app {
 
     #[task(priority = 1,
         shared = [millis_counter, wanted_led_state, adc_transfer, adc_result],
-        local = [motor_pwm, mpu]
+        local = [motor_pwm, mpu, vbat_lowpass]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
         let mut brain = BrainState::new(0);
@@ -531,8 +539,16 @@ mod app {
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
-            robot.proximity_sensor_readings.clear();
             cx.shared.adc_result.lock(|adc_result| {
+                // Monitor Vbat
+                // 100k:4.7k resistor divider, 3.3V reference
+                let vbat = adc_result[6] as f32 / 4096.0 * (1.0+100.0/4.7) * 3.3;
+                *cx.local.vbat_lowpass = *cx.local.vbat_lowpass * 0.95 + vbat * 0.05;
+                robot.battery_voltage = *cx.local.vbat_lowpass;
+                //info!("Vbat = {:?} V", cx.local.vbat_lowpass);
+
+                // Convert proximity sensor readings
+                robot.proximity_sensor_readings.clear();
                 // NOTE: The algorithm currently assumes sensors to be in this
                 //       exact order
                 let proximity_sensor_angles =
@@ -547,7 +563,7 @@ mod app {
                         if raw < 10 {
                             1000.0
                         } else {
-                            (4500.0 / raw as f32).max(5.5)
+                            (18000.0 / raw as f32).max(5.5)
                         }
                     };
                     let detected: bool = (distance_cm < 45.0);
@@ -569,33 +585,34 @@ mod app {
 
             brain.update(&mut robot);
 
-            // Theoretical basis for scaling:
-            // * Wheel speeds are specified in cm/s
-            // * Wheel diameters are 36mm
-            // * Gearing from motor to wheel is 21:10
-            // * Battery voltage is 11.0V
-            // * Motor speed is 590rpm @ 6.0V @ 100% PWM
-            // -> Motor speed is 11.0/6.0*590 =  1081rpm @ 11.0V @ 100% PWM
-            // -> Wheel speed is 1081*10/21 = 514rpm @ 100% PWM
-            // -> Wheel speed is 514/60*pi*2*3.6 = 194cm/s @ 100% PWM
-            // -> Conversion factor from cm/s to PWM is 1.0/194 = 0.00515
-            //    * This is boosted by a bit to overcome friction
-            // -> Test speed: Wheel should spin at 2r/s at 120/514 = 23.3% PWM.
-            //    This should be the equivalent of 2*pi*2*3.6 = 45cm/s
-            //    Tested to match reality on 2024-01-28
-            //    * Comment: There isn't much torque, the wheels can almost stop
-            //      rotating at some friction spots of the drivetrain
-            //let motor_pwm_left = 0.233;
-            //let motor_pwm_right = 0.233;
-            let cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
-            let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
-            let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
-            set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
-
-            //cortex_m::asm::delay(16_000_000);
-            //robot.wheel_speed_right += 1.0;
-
             //info!("wheel_speed: {:?} {:?}", robot.wheel_speed_left, robot.wheel_speed_right);
+
+            if *cx.local.vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
+                set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
+            } else {
+                // Theoretical basis for scaling:
+                // * Wheel speeds are specified in cm/s
+                // * Wheel diameters are 36mm
+                // * Gearing from motor to wheel is 21:10
+                // * Battery voltage is 11.0V
+                // * Motor speed is 590rpm @ 6.0V @ 100% PWM
+                // -> Motor speed is 11.0/6.0*590 =  1081rpm @ 11.0V @ 100% PWM
+                // -> Wheel speed is 1081*10/21 = 514rpm @ 100% PWM
+                // -> Wheel speed is 514/60*pi*2*3.6 = 194cm/s @ 100% PWM
+                // -> Conversion factor from cm/s to PWM is 1.0/194 = 0.00515
+                //    * This is boosted by a bit to overcome friction
+                // -> Test speed: Wheel should spin at 2r/s at 120/514 = 23.3% PWM.
+                //    This should be the equivalent of 2*pi*2*3.6 = 45cm/s
+                //    Tested to match reality on 2024-01-28
+                //    * Comment: There isn't much torque, the wheels can almost stop
+                //      rotating at some friction spots of the drivetrain
+                //let motor_pwm_left = 0.233;
+                //let motor_pwm_right = 0.233;
+                let cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
+                let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
+                let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
+                set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
+            }
 
             // Toggle LED for debugging
             //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });

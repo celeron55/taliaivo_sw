@@ -12,6 +12,10 @@ Manual fixes to be done on a fresh board:
 	  38, 39. For this reason you can solder bridge the neighboring pins and it
 	  does not hurt at all, which makes this modification very easy to make.
 3. Solder a jumper wire from C23 to C34 (VREF to 3.3V)
+4. Solder two resistors from STM32 pin 32 and 33 (parallel them, for ease of
+   soldering):
+	1. 100k to the center terminal of SW1 (the big switch)
+	2. 4.7k to GND (e.g. R20, R10, C17 or C20)
 
 Enabling the DFU:
 - Connect BOOT0 to 3.3V when powering up the board via USB. This should put the

@@ -107,8 +107,8 @@ impl RobotInterface for Robot {
         return (0.0, 0.0, 0.0);
     }
     // Voltages of individual cells
-    fn get_battery_cell_voltages(&self, _values: &mut[&f32]) {
-        // TODO
+    fn get_battery_min_cell_voltage(&self) -> f32 {
+        return 3.7;
     }
 
     // LED control
