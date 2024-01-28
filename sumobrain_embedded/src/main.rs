@@ -711,9 +711,6 @@ mod app {
                 let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
                 let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
                 set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
-                let motor_pwm_left = 0.233;
-                let motor_pwm_right = 0.233;
-                set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
             } else {
                 set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
             }
@@ -765,6 +762,11 @@ mod app {
                     Systick::delay(100.millis()).await;
                     cx.local.led_pin.set_state(false.into());
                     Systick::delay(100.millis()).await;
+                } else {
+                    cx.local.led_pin.set_state(true.into());
+                    Systick::delay(1000.millis()).await;
+                    cx.local.led_pin.set_state(false.into());
+                    Systick::delay(1000.millis()).await;
                 }
             } else if drive_mode == DriveMode::Stop {
                 cx.local.led_pin.set_state(true.into());
@@ -783,8 +785,8 @@ mod app {
             } else {
                 let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
                 cx.local.led_pin.set_state(wanted_state.into());
-                Systick::delay(1.millis()).await;
             }
+            Systick::delay(1.millis()).await;
         }
     }
 
