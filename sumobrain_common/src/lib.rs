@@ -29,10 +29,10 @@ const ARENA_DIMENSION: f32 = 63.0; // cm. Used to predict opposing walls.
 //const SCANNING_FREQUENCY: f32 = 10.0;
 //const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 15.0;
 //const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 40.0;
-const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+const AGGRESSIVENESS: f32 = 0.3; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 const MAX_LINEAR_SPEED: f32 = 30.0;
 const MAX_ROTATION_SPEED: f32 = PI * 2.5;
-const SCANNING_ROTATION_SPEED: f32 = 1.0;
+const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 0.5;
 const SCANNING_FREQUENCY: f32 = 5.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
@@ -220,7 +220,7 @@ impl BrainState {
         }
 
         // 0.998 works for keeping up to date with a 125x125cm arena
-        self.map.global_forget(0.998);
+        self.map.global_forget(1.0 - 0.002 * (125.0 / ARENA_DIMENSION));
 
         let track = robot.get_track_width();
         let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
@@ -433,8 +433,8 @@ impl BrainState {
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
             let mut safe_linear_speed = MAX_LINEAR_SPEED;
-            let L = WALL_AVOID_DISTANCE_HEAD_ON * 0.75;
-            let L2 = WALL_AVOID_DISTANCE_HEAD_ON * 0.5;
+            let L = WALL_AVOID_DISTANCE_ANY_DIRECTION;
+            let L2 = WALL_AVOID_DISTANCE_ANY_DIRECTION * 0.75;
             if d0 < L {
                 safe_linear_speed *= 0.5;
             }
@@ -640,7 +640,7 @@ impl BrainState {
                 // set threshold, we don't want to investigate the point as it
                 // would be unsafe
                 let d_point_to_wall = line.distance(point_tile);
-                if d_point_to_wall < 6.0 {
+                if d_point_to_wall < WALL_AVOID_DISTANCE_HEAD_ON * 0.15 {
                     return false;
                 }
 
@@ -682,9 +682,9 @@ impl BrainState {
         /*let wanted_rotation_speed = MAX_ROTATION_SPEED * 3.0 / 4.0 *
                 (self.counter as f32 / UPS as f32 * 1.0).sin();*/
         let wanted_rotation_speed = if ((self.counter / UPS as u64 / 2) % 2) == 0 {
-            MAX_ROTATION_SPEED * 3.0 / 4.0
+            SCANNING_ROTATION_SPEED
         } else {
-            -MAX_ROTATION_SPEED * 3.0 / 4.0
+            -SCANNING_ROTATION_SPEED
         };
         return (wanted_linear_speed, wanted_rotation_speed);
     }
@@ -703,7 +703,7 @@ impl BrainState {
         }
         // Apply some motor speed modulation to get scanning data to help stay
         // on target
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED * 2.0 / 1.5;
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
         // Revert linear speed at an interval to allow the weapon to spin up
         if self.attack_step_count > UPS * 2 &&
                 ((self.attack_step_count as u32) % (UPS * 4)) < (UPS as f32 * 0.3) as u32 {
@@ -738,7 +738,7 @@ impl BrainState {
         let speed_factor = if allow_overshoot {
             (1.0 - angle_diff / PI * 2.0).clamp(0.0, 1.0)
         } else {
-            ((u.magnitude() / 20.0).clamp(0.0, 1.0) - angle_diff / PI * 2.0).clamp(0.0, 1.0)
+            ((u.magnitude() / 20.0).clamp(-1.0, 1.0) - angle_diff / PI * 2.0).clamp(-1.0, 1.0)
         };
         let wanted_linear_speed = max_linear_speed * speed_factor;
         let wanted_rotation_speed = self.steer_towards_absolute_angle(
