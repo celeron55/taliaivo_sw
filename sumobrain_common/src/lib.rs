@@ -17,7 +17,7 @@ const ENEMY_HISTORY_LENGTH: usize = 50;
 
 // Arena configuration
 //const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
-const ARENA_DIMENSION: f32 = 63.0; // cm. Used to predict opposing walls.
+const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
 
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
