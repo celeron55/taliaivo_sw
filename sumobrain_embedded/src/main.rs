@@ -285,6 +285,7 @@ mod app {
         adc_result: [u16; ADC_NUM_CHANNELS],
         drive_mode: DriveMode,
         vbat_lowpass: f32,
+        log_proximity: bool,
     }
 
     #[local]
@@ -514,6 +515,7 @@ mod app {
                 adc_result: [0; ADC_NUM_CHANNELS],
                 drive_mode: DriveMode::Normal,
                 vbat_lowpass: 0.0,
+                log_proximity: false,
             },
             Local {
                 led_pin: led_pin,
@@ -542,7 +544,8 @@ mod app {
             adc_transfer,
             adc_result,
             drive_mode,
-            vbat_lowpass
+            vbat_lowpass,
+            log_proximity,
         ],
         local = [motor_pwm, mpu]
     )]
@@ -570,25 +573,37 @@ mod app {
                 // NOTE: The algorithm currently assumes sensors to be in this
                 //       exact order
                 let proximity_sensor_angles =
-                        [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+                        [0.0, 45.0, -45.0, 90.0, -90.0, 180.0];
                 // TODO: Check that there isn't a mixup between left and right
                 //       (currently it's assumed -90 = right)
                 let adc_indexes = [2, 1, 3, 0, 4, 5];
                 for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                     let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                     let raw = adc_result[adc_indexes[i]];
-                    let distance_cm = {
-                        if raw < 10 {
-                            1000.0
+                    let (distance_cm, detected) = {
+                        if raw < 190 {
+                            (99.0, false)
                         } else {
-                            (18000.0 / raw as f32).max(5.5)
+                            ((18000.0 / raw as f32).max(5.5), true)
                         }
                     };
-                    let detected: bool = (distance_cm < 45.0);
                     robot.proximity_sensor_readings.push(
                             (angle_rad as f32, distance_cm, detected));
                 }
             });
+
+            let log_proximity = cx.shared.log_proximity.lock(|v|{ *v });
+            if log_proximity {
+                if robot.proximity_sensor_readings.len() >= 6 {
+                    info!("Proximity: {:.0} {:.0} {:.0} {:.0} {:.0} {:.0} (cm)",
+                            robot.proximity_sensor_readings[0].1,
+                            robot.proximity_sensor_readings[1].1,
+                            robot.proximity_sensor_readings[2].1,
+                            robot.proximity_sensor_readings[3].1,
+                            robot.proximity_sensor_readings[4].1,
+                            robot.proximity_sensor_readings[5].1);
+                }
+            }
 
             let acc = cx.local.mpu.get_acc();
             //info!("MPU6050: acc: {:?}", acc);
@@ -690,6 +705,7 @@ mod app {
             wanted_led_state,
             drive_mode,
             vbat_lowpass,
+            log_proximity,
         ],
         local = [command_accumulator]
     )]
@@ -715,6 +731,9 @@ mod app {
                     } else if command == ArrayString::from("bat").unwrap() {
                         let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
                         info!("Battery voltage: {:?}", cx.shared.vbat_lowpass.lock(|v| { *v }));
+                    } else if command == ArrayString::from("prox").unwrap() {
+                        let log_proximity = cx.shared.log_proximity.lock(|v|{ *v = !*v; *v });
+                        info!("Proximity logging: {:?}", log_proximity);
                     } else {
                         info!("-> {:?} is an unknown command", command);
                         info!("Available commands:");
