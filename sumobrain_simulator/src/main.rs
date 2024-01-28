@@ -6,6 +6,9 @@ use sumobrain_common::{RobotInterface, BrainState, Map, BrainInterface};
 use arrayvec::ArrayVec;
 use sumobrain_common::map::HoughLine;
 use rand::distributions::{Distribution, Uniform};
+use std::fs::File;
+use std::io::{self, BufRead};
+use std::path::Path;
 
 mod cli;
 use cli::Cli;
@@ -38,41 +41,60 @@ const GROUP_ROBOT1_BODY:   u32 = 0b00000010;
 const GROUP_ROBOT0_WEAPON: u32 = 0b00000100;
 const GROUP_ROBOT1_WEAPON: u32 = 0b00010000;
 
+const SENSOR_LOG_NUM_VALUES: usize = 10;
+
 struct SensorLogReader {
-    // TODO
+    // TODO: Store iterator here, don't pre-parse all lines
+    value_lines: Vec<[f32; SENSOR_LOG_NUM_VALUES]>,
+    next_i: usize,
 }
 
 impl SensorLogReader {
     fn new(path: std::path::PathBuf) -> Self {
-        // TODO
+        let file = File::open(path).unwrap();
+        let reader = io::BufReader::new(file);
+        let mut value_lines = vec![];
+        for line in reader.lines().flatten() {
+            println!("{:?}", line);
+            // TODO: Fill in values based on parsed line
+
+            let mut values: [f32; SENSOR_LOG_NUM_VALUES] = [0.0; SENSOR_LOG_NUM_VALUES];
+
+            // Proximity sensors
+            values[0] = 20.0;
+            values[1] = 20.0;
+            values[2] = 20.0;
+            values[3] = 20.0;
+            values[4] = 20.0;
+            values[5] = 20.0;
+
+            // Gyro z
+            values[6] = PI as f32 * 0.2;
+
+            // Wheel speeds
+            values[7] = 0.0;
+            values[8] = 0.0;
+
+            // Vbat
+            values[9] = 11.0;
+
+            value_lines.push(values);
+        }
         SensorLogReader {
+            value_lines: value_lines,
+            next_i: 0,
         }
     }
 
-    fn read(&mut self) -> [f32; 10] {
-        let mut values: [f32; 10] = [0.0; 10];
-
-        // TODO
-
-        // Proximity sensors
-        values[0] = 20.0;
-        values[1] = 20.0;
-        values[2] = 20.0;
-        values[3] = 20.0;
-        values[4] = 20.0;
-        values[5] = 20.0;
-
-        // Gyro z
-        values[6] = PI as f32 * 0.2;
-
-        // Wheel speeds
-        values[7] = 0.0;
-        values[8] = 0.0;
-
-        // Vbat
-        values[9] = 11.0;
-
-        values
+    fn read(&mut self) -> [f32; SENSOR_LOG_NUM_VALUES] {
+        if self.next_i < self.value_lines.len() {
+            let values = self.value_lines[self.next_i];
+            self.next_i += 1;
+            values
+        } else {
+            let mut values: [f32; SENSOR_LOG_NUM_VALUES] = [0.0; SENSOR_LOG_NUM_VALUES];
+            values
+        }
     }
 }
 
