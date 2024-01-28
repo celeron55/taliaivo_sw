@@ -28,6 +28,7 @@ use rtic_monotonics::systick::*;
 use usb_device::{prelude::*};
 use usbd_serial::USB_CLASS_CDC;
 use usbd_serial;
+use mpu6050::{Mpu6050, Mpu6050Error};
 
 use arrayvec::{ArrayVec, ArrayString};
 use nalgebra::{Vector2, Point2, Rotation2};
@@ -132,6 +133,7 @@ impl RobotInterface for Robot {
         // TODO: Pass somewhere: USB, wireless link or SD card?
     }
 }
+
 
 // Log buffering system
 
@@ -276,6 +278,7 @@ mod app {
         command_accumulator: CommandAccumulator<50>,
         motor_pwm: MotorPwm,
         adc_buffer: Option<&'static mut [u16; ADC_NUM_CHANNELS]>,
+        mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
     }
 
     #[init(
@@ -299,26 +302,16 @@ mod app {
             .sysclk(168.MHz()) // Set system clock (SYSCLK)
             .freeze(); // Apply the configuration
 
-        // SysTick
-
-        let systick_token = rtic_monotonics::create_systick_token!();
-        Systick::start(cx.core.SYST, 168_000_000, systick_token);
-
-        // Software utilities
-
-        init_logger();
-
-        info!("-!- Taliaivo up and running");
-
         // I/O
 
         let gpioa = cx.device.GPIOA.split();
+        let gpiob = cx.device.GPIOB.split();
         let gpiod = cx.device.GPIOD.split();
 
         let mut led_pin = gpioa.pa8.into_push_pull_output();
         led_pin.set_high();
 
-        let mut debug_pin = cx.device.GPIOB.split().pb10.into_push_pull_output();
+        //let mut debug_pin = gpiob.pb10.into_push_pull_output();
 
         // Motor control
 
@@ -358,6 +351,52 @@ mod app {
                 (motor_pwm.get_max_duty() as f32 * 0.1) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C4,
                 (motor_pwm.get_max_duty() as f32 * 0.0) as u16);*/
+
+        // MPU6050
+        // Accelerometer:
+        // - Resting position: (0, 0, -1)
+        // - Accelerating backwards: (-1, 0, -1)
+        // - Accelerating left: (0, -1, -1)
+        // Gyro:
+        // - Turning left: (0, 0, -1)
+        // - Turning right: (0, 0, 1)
+        // - Flipping left: (-1, 0, 0)
+        // - Flipping right: (1, 0, 0)
+        // - Flipping forward: (0, -1, 0)
+        // - Flipping backward: (0, 1, 0)
+
+        let mut mpu_i2c = hal::i2c::I2c::new(
+            cx.device.I2C1,
+            (gpiob.pb6, gpiob.pb7),
+            hal::i2c::Mode::Standard { frequency: 400.kHz() },
+            &clocks
+        );
+        //let mut mpu = Mpu6050::new(mpu_i2c);
+        let mut mpu = Mpu6050::new_with_addr(mpu_i2c, 0x69); // AD0 looks to be high
+        let mut syst = {
+            let mut delay = cortex_m::delay::Delay::new(cx.core.SYST, 168_000_000);
+            mpu.init(&mut delay);
+            delay.free() // Return SYST peripheral for other uses
+        };
+        mpu.set_clock_source(mpu6050::device::CLKSEL::GZAXIS);
+        mpu.set_accel_range(mpu6050::device::AccelRange::G16);
+        mpu.set_gyro_range(mpu6050::device::GyroRange::D2000);
+
+        // SysTick
+
+        let systick_token = rtic_monotonics::create_systick_token!();
+        Systick::start(syst, 168_000_000, systick_token); // Finally eats SYST peripheral
+
+        // Software utilities
+
+        init_logger();
+
+        info!("-!- Taliaivo up and running");
+
+        let acc = mpu.get_acc();
+        info!("MPU6050: acc: {:?}", acc);
+        let gyro = mpu.get_gyro();
+        info!("MPU6050: gyro: {:?}", gyro);
 
         // UART1
 
@@ -461,6 +500,7 @@ mod app {
                 command_accumulator: CommandAccumulator::new(),
                 motor_pwm: motor_pwm,
                 adc_buffer: Some(cx.local.adc_buffer2),
+                mpu: mpu,
             }
         )
     }
@@ -474,7 +514,7 @@ mod app {
 
     #[task(priority = 1,
         shared = [millis_counter, wanted_led_state, adc_transfer, adc_result],
-        local = [motor_pwm]
+        local = [motor_pwm, mpu]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
         let mut brain = BrainState::new(0);
@@ -509,6 +549,12 @@ mod app {
                             (angle_rad as f32, distance_cm, detected));
                 }
             });
+
+            let acc = cx.local.mpu.get_acc();
+            //info!("MPU6050: acc: {:?}", acc);
+            let gyro = cx.local.mpu.get_gyro();
+            //info!("MPU6050: gyro: {:?}", gyro);
+            // TODO: Use these values from MPU6050
 
             brain.update(&mut robot);
 
