@@ -91,6 +91,14 @@ impl SensorLogReader {
             values
         }
     }
+
+    fn eof(&self) -> bool {
+        self.next_i >= self.value_lines.len()
+    }
+
+    fn restart(&mut self) {
+        self.next_i = 0
+    }
 }
 
 struct Robot {
@@ -824,7 +832,14 @@ fn main() {
 
         if e.update_args().is_some() && !paused {
             if !slow_motion || slow_motion_counter % 5 == 0 {
-                if ENABLE_ROBOT_BRAIN[0] {
+                if let Some(ref mut reader) = sensor_log_reader {
+                    if !reader.eof() {
+                        brain.update(&mut robots[0]);
+                    } else {
+                        // TODO: Make configurable
+                        reader.restart();
+                    }
+                } else if ENABLE_ROBOT_BRAIN[0] {
                     brain.update(&mut robots[0]);
                 }
 
