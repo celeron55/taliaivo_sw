@@ -54,6 +54,9 @@ use sumobrain_common::map::HoughLine;
 mod command_accumulator;
 use command_accumulator::CommandAccumulator;
 
+const MAX_PWM: f32 = 0.40;
+const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
+
 struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
@@ -233,26 +236,25 @@ fn set_motor_speeds(
     pwm_right: f32,
     motor_pwm: &mut MotorPwm,
 ){
-    let max_pwm = 0.25;
     // Motor A (connector J1) (right side; C1 > C2 = forward)
     if pwm_right >= 0.0 {
         motor_pwm.set_duty(hal::timer::Channel::C1,
-                (motor_pwm.get_max_duty() as f32 * (pwm_right).min(max_pwm)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (pwm_right).min(MAX_PWM)) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C2, 0);
     } else {
         motor_pwm.set_duty(hal::timer::Channel::C1, 0);
         motor_pwm.set_duty(hal::timer::Channel::C2,
-                (motor_pwm.get_max_duty() as f32 * (-pwm_right).min(max_pwm)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (-pwm_right).min(MAX_PWM)) as u16);
     }
     // Motor B (connector J2) (left side; C3 > C4 = forward)
     if pwm_left >= 0.0 {
         motor_pwm.set_duty(hal::timer::Channel::C3,
-                (motor_pwm.get_max_duty() as f32 * (pwm_left).min(max_pwm)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (pwm_left).min(MAX_PWM)) as u16);
         motor_pwm.set_duty(hal::timer::Channel::C4, 0);
     } else {
         motor_pwm.set_duty(hal::timer::Channel::C3, 0);
         motor_pwm.set_duty(hal::timer::Channel::C4,
-                (motor_pwm.get_max_duty() as f32 * (-pwm_left).min(max_pwm)) as u16);
+                (motor_pwm.get_max_duty() as f32 * (-pwm_left).min(MAX_PWM)) as u16);
     }
 }
 
@@ -567,11 +569,27 @@ mod app {
 
             brain.update(&mut robot);
 
-            /*let motor_pwm_left = 0.1;
-            let motor_pwm_right = 0.1;*/
-            // TODO: Correct scaling
-            let motor_pwm_left = robot.wheel_speed_left * 0.020;
-            let motor_pwm_right = robot.wheel_speed_right * 0.020;
+            // Theoretical basis for scaling:
+            // * Wheel speeds are specified in cm/s
+            // * Wheel diameters are 36mm
+            // * Gearing from motor to wheel is 21:10
+            // * Battery voltage is 11.0V
+            // * Motor speed is 590rpm @ 6.0V @ 100% PWM
+            // -> Motor speed is 11.0/6.0*590 =  1081rpm @ 11.0V @ 100% PWM
+            // -> Wheel speed is 1081*10/21 = 514rpm @ 100% PWM
+            // -> Wheel speed is 514/60*pi*2*3.6 = 194cm/s @ 100% PWM
+            // -> Conversion factor from cm/s to PWM is 1.0/194 = 0.00515
+            //    * This is boosted by a bit to overcome friction
+            // -> Test speed: Wheel should spin at 2r/s at 120/514 = 23.3% PWM.
+            //    This should be the equivalent of 2*pi*2*3.6 = 45cm/s
+            //    Tested to match reality on 2024-01-28
+            //    * Comment: There isn't much torque, the wheels can almost stop
+            //      rotating at some friction spots of the drivetrain
+            //let motor_pwm_left = 0.233;
+            //let motor_pwm_right = 0.233;
+            let cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
+            let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
+            let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
             set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
 
             //cortex_m::asm::delay(16_000_000);
