@@ -128,7 +128,7 @@ struct ArenaWall {
 impl RobotInterface for Robot {
     // Capabilities and dimensions
     fn get_track_width(&self) -> f32 {
-        return self.right_wheel_position.x - self.left_wheel_position.x;
+        return (self.right_wheel_position.x - self.left_wheel_position.x).abs();
     }
 
     // Motor control
@@ -215,8 +215,10 @@ impl Robot {
             blade_handle: None,
             wheel_speed_left: 0.0,
             wheel_speed_right: 0.0,
-            left_wheel_position: Point2::new(-5.0, 2.0), // -X=left, -Y=front
-            right_wheel_position: Point2::new(5.0, 2.0),
+            // NOTE: These seem to be the wrong way around in X, but this way
+            //       replays do the correct thing
+            left_wheel_position: Point2::new(5.0, 2.0), // -X=left, -Y=front
+            right_wheel_position: Point2::new(-5.0, 2.0),
             weapon_throttle: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
             gyro_z: 0.0,
@@ -899,12 +901,10 @@ fn main() {
                                 detected));
                     }
                 } else {
-                    if robots.len() >= 2 {
-                        let ref mut robot = robots[1];
-                        robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
-                        robot.update_sensors(&mut query_pipeline, &collider_set,
-                                &rigid_body_set, counter);
-                    }
+                    let ref mut robot = robots[0];
+                    robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
+                    robot.update_sensors(&mut query_pipeline, &collider_set,
+                            &rigid_body_set, counter);
                 }
 
                 physics_pipeline.step(
