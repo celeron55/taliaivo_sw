@@ -887,10 +887,10 @@ fn main() {
                     for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                         let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                         let (distance_cm, detected) = {
-                            if sensors[0] > 94.0 {
+                            if sensors[i] > 94.0 {
                                 (94.0, false)
                             } else {
-                                (sensors[0], true)
+                                (sensors[i], true)
                             }
                         };
                         robot.proximity_sensor_readings.push((
