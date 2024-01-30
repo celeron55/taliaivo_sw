@@ -23,7 +23,10 @@ Manual fixes to be done on a fresh board:
    soldering):
 	1. 100k to the center terminal of SW1 (the big switch)
 	2. 4.7k to GND (e.g. R20, R10, C17 or C20)
+	* This connects ADC to monitor Vbat
 5. Solder U6(MPU6050).9 -> U6.8 (or to any other 3.3V pad)
+	* This configures MPU6050 to use a certain address (otherwise it
+	  uncontrollably wiggles between two)
 
 Enabling the DFU:
 - Connect BOOT0 to 3.3V when powering up the board via USB. This should put the
