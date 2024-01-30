@@ -53,7 +53,7 @@ $ ./build_release.sh
 Flashing physical hardware
 --------------------------
 Direct USB firmware update using DFU mode:
-- Hold BOOT0 connected to GND
+- Hold BOOT0 connected to 3.3V
 - Connect USB.
 - The board should appear as "Product: STM32 BOOTLOADER"
 $ ./dfu_release.sh
