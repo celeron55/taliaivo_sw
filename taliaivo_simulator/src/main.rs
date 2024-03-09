@@ -24,7 +24,10 @@ const ENABLE_ROBOT_WEAPON: [bool; 2] = [false, false];
 const ENABLE_ROBOT_BRAIN: [bool; 2] = [true, false];
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
 const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
-const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
+//const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
+// Not realistic, but the current physics simulation requires this in order for
+// the robots to not spin uncontrollably when continuing forward after a turn
+const ROBOT_FRICTION_COEFFICIENT: f32 = 1.7;
 
 const SIMULATE_LIDAR: bool = false;
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
