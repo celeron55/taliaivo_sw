@@ -8,7 +8,7 @@ use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-use libc_print::std_name::println;
+//use libc_print::std_name::println;
 use micromath::F32Ext; // f32.sin and f32.cos
 pub use map::*;
 
@@ -750,8 +750,8 @@ impl BrainState {
     pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
         let angle_diff = wrap_angle(((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI);
-        println!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
-                target_angle_rad, self.rot, angle_diff);
+        /*println!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
+                target_angle_rad, self.rot, angle_diff);*/
         let speed_factor = 0.2 + (angle_diff.abs() / PI * 0.8);
         if angle_diff < 0.0 {
             return speed_factor * max_rotation_speed;
