@@ -16,6 +16,7 @@ pub const UPS: u32 = 50; // Updates per second
 const ENEMY_HISTORY_LENGTH: usize = 50;
 
 // Arena configuration
+// TODO: Remember to adjust this for the target arena
 //const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
 const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
 
