@@ -8,7 +8,7 @@ use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-//use libc_print::std_name::println;
+use libc_print::std_name::println;
 use micromath::F32Ext; // f32.sin and f32.cos
 pub use map::*;
 
@@ -17,8 +17,8 @@ const ENEMY_HISTORY_LENGTH: usize = 50;
 
 // Arena configuration
 // TODO: Remember to adjust this for the target arena
-//const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
-const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
+const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
+//const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
 
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
@@ -33,7 +33,7 @@ const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
 const AGGRESSIVENESS: f32 = 0.3; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 const MAX_LINEAR_SPEED: f32 = 30.0;
 const MAX_ROTATION_SPEED: f32 = PI * 2.5;
-const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 0.5;
+const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 0.25;
 const SCANNING_FREQUENCY: f32 = 5.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
@@ -167,6 +167,17 @@ fn tile_is_close_to_wall(p: Point2<f32>,
     return false;
 }
 
+fn wrap_angle(mut a: f32) -> f32 {
+    // TODO: Better wrapping
+    while a < PI {
+        a += PI * 2.0
+    }
+    while a > PI {
+        a -= PI * 2.0
+    }
+    return a
+}
+
 pub struct BrainState {
     seed: u32,
     counter: u64,
@@ -271,6 +282,7 @@ impl BrainState {
         // TODO: The value here should be filtered roughly by the same amount as
         //       the proximity sensors are
         self.rot += gyro_based_rotation_speed_unfiltered / UPS as f32;
+        self.rot = wrap_angle(self.rot);
 
         // TODO: If gyro_z doesn't match rotation caused by wheel speeds, assume
         //       a wheel is not touching the ground and act differently?
@@ -591,11 +603,11 @@ impl BrainState {
 
         // Avoid hits also with stupid logic. The wall detection is not always
         // fast enough as it requires a certain length of wall to be seen.
-        // TODO: Make this activate only when not having recently been in attack
-        // mode, because this essentially cancels an attack right when about to
-        // hit the opponent
-        /*
-        if self.proximity_sensor_readings.len() >= 6 {
+        // Activate only when not having recently been in attack mode, because
+        // this essentially cancels an attack right when about to hit the
+        // opponent
+        // TODO: Require longer time of not being in attack mode
+        if self.attack_step_count == 0 && self.proximity_sensor_readings.len() >= 6 {
             let d0 = self.proximity_sensor_readings[0].1;
             let d1 = self.proximity_sensor_readings[1].1;
             let d2 = self.proximity_sensor_readings[2].1;
@@ -622,7 +634,6 @@ impl BrainState {
                 return (wanted_linear_speed, wanted_rotation_speed);
             }
         }
-        */
 
         //println!("scan");
         self.attack_step_count = 0;
@@ -738,10 +749,11 @@ impl BrainState {
     // Returns a value suitable for wanted_rotation_speed
     pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
-        let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
-        //println!("angle_diff: {:?}", angle_diff);
+        let angle_diff = wrap_angle(((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI);
+        println!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
+                target_angle_rad, self.rot, angle_diff);
         let speed_factor = 0.2 + (angle_diff.abs() / PI * 0.8);
-        if angle_diff > 0.0 {
+        if angle_diff < 0.0 {
             return speed_factor * max_rotation_speed;
         } else {
             return speed_factor * -max_rotation_speed;
