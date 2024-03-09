@@ -20,7 +20,7 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 33; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
-const ENABLE_ROBOT_WEAPON: [bool; 2] = [false, false];
+const ENABLE_ROBOT_WEAPON: [bool; 2] = [true, false];
 const ENABLE_ROBOT_BRAIN: [bool; 2] = [true, false];
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
 const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
@@ -649,7 +649,7 @@ impl KeyboardController {
 impl BrainInterface for KeyboardController {
     fn update(&mut self, robot: &mut dyn RobotInterface) {
         let speed = 100.0;
-        let turn_speed = 35.0;
+        let turn_speed = 25.0;
 
         let mut wheel_speed_left = 0.0;
         let mut wheel_speed_right = 0.0;
@@ -763,7 +763,7 @@ fn main() {
                 InteractionGroups::new(
                         (GROUP_ROBOT0_WEAPON).into(), (GROUP_ROBOT1_BODY | GROUP_ARENA).into()));
     }
-    if robots.len() >= 2 && ENABLE_ROBOT_WEAPON[0] {
+    if robots.len() >= 2 && ENABLE_ROBOT_WEAPON[1] {
         robots[1].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
                 8.0, 1.5, 0.0, point![0.0, 3.0],
                 InteractionGroups::new(
