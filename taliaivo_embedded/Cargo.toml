@@ -1,5 +1,5 @@
 [package]
-name = "sumobrain_embedded"
+name = "taliaivo_embedded"
 version = "0.1.0"
 edition = "2021"
 
@@ -30,7 +30,7 @@ once_cell = { version = "1.19.0", default-features = false, features = ["race"] 
 ringbuffer = { version = "0.15.0", default-features = false }
 
 # Cross platform algorithm
-sumobrain_common = { path = "../sumobrain_common" }
+taliaivo_common = { path = "../taliaivo_common" }
 arrayvec = { version = "0.7.4", default-features = false, features = [] }
 nalgebra = { version = "0.32.3", default-features = false, features = [ "libm" ] }
 

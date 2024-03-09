@@ -2,9 +2,9 @@ use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
-use sumobrain_common::{RobotInterface, BrainState, Map, BrainInterface};
+use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface};
 use arrayvec::ArrayVec;
-use sumobrain_common::map::HoughLine;
+use taliaivo_common::map::HoughLine;
 use rand::distributions::{Distribution, Uniform};
 use std::fs::File;
 use std::io::{self, BufRead};
@@ -15,7 +15,7 @@ use cli::Cli;
 use clap::Parser;
 
 const FPS: u64 = 120;
-const UPS: u64 = sumobrain_common::UPS as u64;
+const UPS: u64 = taliaivo_common::UPS as u64;
 const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 33; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
@@ -702,7 +702,7 @@ impl BrainInterface for DummyController {
 fn main() {
 	let cli = Cli::parse();
 
-    let mut window: PistonWindow = WindowSettings::new("Sumobrain Simulator", [1200, 600])
+    let mut window: PistonWindow = WindowSettings::new("Taliaivo Simulator", [1200, 600])
         .exit_on_esc(true)
         .build()
         .unwrap();

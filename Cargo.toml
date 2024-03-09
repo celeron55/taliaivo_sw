@@ -1,8 +1,8 @@
 [workspace]
 members = [
-  "sumobrain_common",
-  "sumobrain_embedded",
-  "sumobrain_simulator"
+  "taliaivo_common",
+  "taliaivo_embedded",
+  "taliaivo_simulator"
 ]
 resolver = "2"
 

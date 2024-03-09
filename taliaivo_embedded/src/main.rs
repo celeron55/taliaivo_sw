@@ -48,8 +48,8 @@ use core::f64::consts::PI;
 //use defmt::{panic, *};
 //use {defmt_rtt as _, panic_probe as _};
 
-use sumobrain_common::{RobotInterface, BrainState, Map, BrainInterface};
-use sumobrain_common::map::HoughLine;
+use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface};
+use taliaivo_common::map::HoughLine;
 
 mod command_accumulator;
 use command_accumulator::CommandAccumulator;
@@ -599,7 +599,7 @@ mod app {
         let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
 
-        let interval_ms = 1000 / sumobrain_common::UPS as u64;
+        let interval_ms = 1000 / taliaivo_common::UPS as u64;
         //let interval_ms = 1000;
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });

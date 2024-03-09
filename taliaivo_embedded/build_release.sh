@@ -7,5 +7,5 @@ cd "$dir"
 cargo +nightly build --release $@
 
 # Target is in ELF format. Convert to binary
-arm-none-eabi-objcopy -O binary ../target/thumbv7em-none-eabihf/release/sumobrain_embedded ../target/thumbv7em-none-eabihf/release/sumobrain_embedded.bin
+arm-none-eabi-objcopy -O binary ../target/thumbv7em-none-eabihf/release/taliaivo_embedded ../target/thumbv7em-none-eabihf/release/taliaivo_embedded.bin
 
