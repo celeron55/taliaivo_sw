@@ -907,6 +907,13 @@ fn main() {
                             &rigid_body_set, counter);
                 }
 
+                if robots.len() >= 2 {
+                    let ref mut robot = robots[1];
+                    robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
+                    robot.update_sensors(&mut query_pipeline, &collider_set,
+                            &rigid_body_set, counter);
+                }
+
                 physics_pipeline.step(
                     &gravity,
                     &integration_parameters,
