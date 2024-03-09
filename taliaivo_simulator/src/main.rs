@@ -659,14 +659,12 @@ impl BrainInterface for KeyboardController {
             wheel_speed_right -= speed;
         }
         if self.left {
-            // FIXME: This seems backwards
-            wheel_speed_left += turn_speed;
-            wheel_speed_right -= turn_speed;
-        }
-        if self.right {
-            // FIXME: This seems backwards
             wheel_speed_left -= turn_speed;
             wheel_speed_right += turn_speed;
+        }
+        if self.right {
+            wheel_speed_left += turn_speed;
+            wheel_speed_right -= turn_speed;
         }
 
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
