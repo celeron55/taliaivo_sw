@@ -249,8 +249,8 @@ impl BrainState {
             self.map.translate(dx_tiles, dy_tiles);
         }
 
-        // 0.998 works for keeping up to date with a 125x125cm arena
-        self.map.global_forget(1.0 - 0.002 * (125.0 / ARENA_DIMENSION));
+        // 0.998 works for keeping up to date with a 125x125cm arena at 100 UPS
+        self.map.global_forget(1.0 - 0.004 * (125.0 / ARENA_DIMENSION));
 
         let servo_inputs = robot.get_rc_input_values();
         let robot_enabled = servo_inputs[0] > 0.5;
