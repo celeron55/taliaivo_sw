@@ -15,7 +15,6 @@ use stm32f4xx_hal::{
     prelude::*,
     serial::{config::Config, Event, Serial},
     pac as pac,
-    otg_fs,
     adc::{
         config::{AdcConfig, Clock, Dma, Resolution, SampleTime, Scan, Sequence},
         Adc,
@@ -26,9 +25,6 @@ use stm32f4xx_hal::{
 };
 use rtic::app;
 use rtic_monotonics::systick::*;
-use usb_device::{prelude::*};
-use usbd_serial::USB_CLASS_CDC;
-use usbd_serial;
 use mpu6050::{Mpu6050, Mpu6050Error};
 
 use arrayvec::{ArrayVec, ArrayString};
@@ -145,7 +141,7 @@ impl RobotInterface for Robot {
             scan_p: Option<Point2<f32>>,
             wall_avoid_p: Option<Point2<f32>>,
             wall_lines: &[HoughLine]) {
-        // TODO: Pass somewhere: USB, wireless link or SD card?
+        // TODO
     }
 }
 
@@ -154,7 +150,6 @@ impl RobotInterface for Robot {
 
 struct MultiLogger {
     uart_buffer: Mutex<RefCell<Option<ArrayString<1024>>>>,
-    usb_buffer: Mutex<RefCell<Option<ArrayString<1024>>>>,
 }
 
 impl MultiLogger {
@@ -164,15 +159,6 @@ impl MultiLogger {
             // This replaces the logger buffer with an empty one, and we get the
             // possibly filled in one
             buf2 = self.uart_buffer.borrow(cs).replace(buf2);
-        });
-        buf2
-    }
-    fn get_usb_buffer(&self) -> Option<ArrayString<1024>> {
-        let mut buf2: Option<ArrayString<1024>> = Some(ArrayString::new());
-        cortex_m::interrupt::free(|cs| {
-            // This replaces the logger buffer with an empty one, and we get the
-            // possibly filled in one
-            buf2 = self.usb_buffer.borrow(cs).replace(buf2);
         });
         buf2
     }
@@ -191,16 +177,9 @@ impl Log for MultiLogger {
                     let _ = buffer.write_fmt(format_args!("[{}] {}\r\n",
                             record.level(), record.args()));
                 }
-                if let Some(ref mut buffer) =
-                        self.usb_buffer.borrow(cs).borrow_mut().deref_mut() {
-                    let _ = buffer.write_fmt(format_args!("[{}] {}\r\n",
-                            record.level(), record.args()));
-                }
             });
             // Trigger write to hardware by triggering USART1 interrupt
             pac::NVIC::pend(pac::Interrupt::USART1);
-            // Trigger write to hardware by triggering OTG_FS interrupt
-            pac::NVIC::pend(pac::Interrupt::OTG_FS);
         }
     }
 
@@ -211,14 +190,12 @@ impl Log for MultiLogger {
 
 static MULTI_LOGGER: MultiLogger = MultiLogger {
     uart_buffer: Mutex::new(RefCell::new(None)),
-    usb_buffer: Mutex::new(RefCell::new(None)),
 };
 
 // Function to initialize the logger
 fn init_logger() {
     cortex_m::interrupt::free(|cs| {
         MULTI_LOGGER.uart_buffer.borrow(cs).replace(Some(ArrayString::new()));
-        MULTI_LOGGER.usb_buffer.borrow(cs).replace(Some(ArrayString::new()));
     });
     log::set_logger(&MULTI_LOGGER).unwrap();
     log::set_max_level(log::LevelFilter::Info); // TODO: Adjust as needed
@@ -290,8 +267,6 @@ mod app {
         millis_counter: u64,
         wanted_led_state: bool,
         console_rxbuf: ConstGenericRingBuffer<u8, 1024>,
-        usb_dev: UsbDevice<'static, otg_fs::UsbBusType>,
-        usb_serial: usbd_serial::SerialPort<'static, otg_fs::UsbBusType>,
         adc_transfer: AdcDmaTransfer,
         adc_result: [u16; ADC_NUM_CHANNELS],
         drive_mode: DriveMode,
@@ -321,9 +296,6 @@ mod app {
         ]
     )]
     fn init(cx: init::Context) -> (Shared, Local) {
-        static mut EP_MEMORY: [u32; 1024] = [0; 1024];
-        static mut USB_BUS: Option<usb_device::bus::UsbBusAllocator<otg_fs::UsbBusType>> = None;
-
         // System clock
 
         let rcc = cx.device.RCC.constrain();
@@ -450,33 +422,6 @@ mod app {
         serial_usart1.listen(Event::RxNotEmpty | Event::TxEmpty);
         let (usart1_tx, usart1_rx) = serial_usart1.split();
 
-        // USB
-
-        let usb = otg_fs::USB::new(
-            (cx.device.OTG_FS_GLOBAL, cx.device.OTG_FS_DEVICE, cx.device.OTG_FS_PWRCLK),
-            (gpioa.pa11.into_alternate::<10>(), gpioa.pa12.into_alternate::<10>()),
-            &clocks
-        );
-
-        unsafe {
-            USB_BUS.replace(otg_fs::UsbBus::new(usb, &mut EP_MEMORY));
-        }
-
-        let usb_serial = usbd_serial::SerialPort::new(unsafe { USB_BUS.as_ref().unwrap() });
-
-        // Use https://pid.codes/1209/0001/
-        let mut usb_dev = UsbDeviceBuilder::new(
-                unsafe { USB_BUS.as_ref().unwrap() },
-                UsbVidPid(0x1209, 0x0001))
-            .device_class(USB_CLASS_CDC)
-            .strings(&[
-                StringDescriptors::new(usb_device::descriptor::lang_id::LangID::EN)
-                    .manufacturer("8Dromeda Productions")
-                    .product("Taliaivo v1.1 (2024)")
-                    .serial_number("1337")
-            ]).unwrap()
-            .build();
-
         // ADC
 
         let adc1_c0 = gpioa.pa0.into_analog();
@@ -537,8 +482,6 @@ mod app {
                 millis_counter: 0,
                 wanted_led_state: true,
                 console_rxbuf: ConstGenericRingBuffer::new(),
-                usb_dev: usb_dev,
-                usb_serial: usb_serial,
                 adc_transfer: adc_transfer,
                 adc_result: [0; ADC_NUM_CHANNELS],
                 drive_mode: DriveMode::Normal,
@@ -932,53 +875,6 @@ mod app {
         if let Some(b) = cx.local.usart1_txbuf.dequeue() {
             cx.local.usart1_tx.write(b);
         }
-    }
-
-    #[task(
-        binds = OTG_FS,
-        shared = [
-            usb_dev,
-            usb_serial,
-            wanted_led_state,
-            console_rxbuf
-        ],
-        local = []
-    )]
-    fn otg_fs_int(mut cx: otg_fs_int::Context) {
-        let otg_fs_int::SharedResources {
-            __rtic_internal_marker,
-            mut usb_dev,
-            mut usb_serial,
-            mut wanted_led_state,
-            mut console_rxbuf,
-        } = cx.shared;
-
-        // TODO: Maybe locking console_rxbuf here with usb_dev and usb_serial
-        // isn't a good idea
-        (&mut usb_dev, &mut usb_serial, &mut console_rxbuf).lock(
-                |usb_dev, usb_serial, console_rxbuf| {
-            // Write
-            let logger_txbuf_option = MULTI_LOGGER.get_usb_buffer();
-            if let Some(mut logger_txbuf) = logger_txbuf_option {
-                // Convert from string to bytes
-                let buf = logger_txbuf.as_bytes();
-                // Just throw the buffer to the peripheral and leave. It'll send
-                // what it can. We don't care how it went.
-                let _ = usb_serial.write(&buf);
-            }
-            // Read
-            if usb_dev.poll(&mut [usb_serial]) {
-                let mut buf = [0u8; 64];
-                match usb_serial.read(&mut buf) {
-                    Ok(count) if count > 0 => {
-                        for i in 0..count {
-                            console_rxbuf.push(buf[i]);
-                        }
-                    }
-                    _ => {}
-                }
-            }
-        });
     }
 
     #[task(binds = DMA2_STREAM0, shared = [adc_transfer, adc_result], local = [adc_buffer])]
