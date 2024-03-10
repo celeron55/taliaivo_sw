@@ -48,7 +48,6 @@ const GROUP_ROBOT1_WEAPON: u32 = 0b00010000;
 const SENSOR_LOG_NUM_VALUES: usize = 10;
 
 struct SensorLogReader {
-    // TODO: Store iterator here, don't pre-parse all lines
     value_lines: Vec<[f32; SENSOR_LOG_NUM_VALUES]>,
     next_i: usize,
 }
@@ -841,6 +840,15 @@ fn main() {
                 robots[0].draw_map(&c, g, &transform1, 2.2);
                 //let transform2 = transform1.trans(0.0, 100.0);
                 //robots[1].draw_map(&c, g, &transform2, 0.75);
+
+                if let Some(reader) = &sensor_log_reader {
+                    // Draw replay progress bar
+                    let progress = reader.next_i as f64 / reader.value_lines.len() as f64;
+                    rectangle([0.8, 0.8, 0.8, 1.0], // Color
+                              [0.0, 0.0, 1200.0 * progress, 10.0], // Dimensions
+                              c.transform,
+                              g);
+                }
             });
         }
 
