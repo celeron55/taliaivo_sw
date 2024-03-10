@@ -21,8 +21,7 @@ const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
 //const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
 
 // Weapon configuration
-//const WEAPON_THROTTLE: f32 = 100.0;
-const WEAPON_THROTTLE: f32 = 20.0;
+const WEAPON_THROTTLE: f32 = 100.0;
 
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
@@ -35,10 +34,12 @@ const WEAPON_THROTTLE: f32 = 20.0;
 //const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 15.0;
 //const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 40.0;
 const AGGRESSIVENESS: f32 = 0.3; // roughly -1.0...1.0, 0.0 = normal aggressiveness
-const MAX_LINEAR_SPEED: f32 = 30.0;
+const MAX_LINEAR_SPEED: f32 = 50.0;
 const MAX_ROTATION_SPEED: f32 = PI * 2.5;
 const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
 const SCANNING_FREQUENCY: f32 = 5.0;
+const ATTACK_SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
+const ATTACK_SCANNING_FREQUENCY: f32 = 1.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
 
@@ -753,7 +754,9 @@ impl BrainState {
         }
         // Apply some motor speed modulation to get scanning data to help stay
         // on target
-        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
+        // NOTE: We don't want to do a lot of this, because it makes the attack
+        // inaccurate
+        wanted_rotation_speed += (self.counter as f32 / UPS as f32 * ATTACK_SCANNING_FREQUENCY).sin() * ATTACK_SCANNING_ROTATION_SPEED;
         // Revert linear speed at an interval to allow the weapon to spin up
         if self.attack_step_count > UPS * 2 &&
                 ((self.attack_step_count as u32) % (UPS * 4)) < (UPS as f32 * 0.3) as u32 {

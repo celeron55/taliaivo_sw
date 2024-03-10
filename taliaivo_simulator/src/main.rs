@@ -25,10 +25,7 @@ const ENABLE_ROBOT_WEAPON: [bool; 2] = [true, false];
 const ENABLE_ROBOT_BRAIN: [bool; 2] = [true, false];
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
 const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
-//const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
-// Not realistic, but the current physics simulation requires this in order for
-// the robots to not spin uncontrollably when continuing forward after a turn
-const ROBOT_FRICTION_COEFFICIENT: f32 = 1.7;
+const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
 
 const SIMULATE_LIDAR: bool = false;
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
@@ -198,6 +195,16 @@ impl RobotInterface for Robot {
     }
 }
 
+fn limit_change(v0: f32, v1: f32, max_change: f32) -> f32 {
+    if v1 < v0 - max_change {
+        v0 - max_change
+    } else if v1 > v0 + max_change {
+        v0 + max_change
+    } else {
+        v1
+    }
+}
+
 impl Robot {
     fn new(rigid_body_set: &mut RigidBodySet, collider_set: &mut ColliderSet, x: f32, y: f32,
             width: f32, height: f32, rotation: f32, velocity: Vector2<f32>, angular_velocity: f32,
@@ -224,8 +231,8 @@ impl Robot {
             // NOTE: These positions are totally wrong (actually the width
             //       should be +-5cm, but this represents better how the robot
             //       moves in reality)
-            left_wheel_position: Point2::new(15.0, 2.0), // -X=left, -Y=front
-            right_wheel_position: Point2::new(-15.0, 2.0),
+            left_wheel_position: Point2::new(5.0, 2.0), // -X=left, -Y=front
+            right_wheel_position: Point2::new(-5.0, 2.0),
             weapon_throttle: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
             gyro_z: 0.0,
@@ -327,7 +334,23 @@ impl Robot {
 
     fn update_movement(&mut self, rigid_body_set: &mut RigidBodySet, dt: f32) {
         if let Some(body) = rigid_body_set.get_mut(self.body_handle) {
-            let robot_velocity = body.linvel();
+            let robot_orientation = body.position().rotation;
+            let mut robot_linvel = *body.linvel();
+            let mut robot_angvel = body.angvel();
+            //println!("robot_orientation: {:?}", robot_orientation);
+            let mut forward = Vector2::<f32>::new(-robot_orientation.im, robot_orientation.re);
+            let wanted_linvel = forward * (self.wheel_speed_left + self.wheel_speed_right) / 2.0;
+            let max_dv = 5.0; // TODO: Calculate based on UPS and friction
+            robot_linvel.x = limit_change(robot_linvel.x, wanted_linvel.x, max_dv);
+            robot_linvel.y = limit_change(robot_linvel.y, wanted_linvel.y, max_dv);
+            body.set_linvel(robot_linvel, true);
+            // TODO: Replace 0.04 with value calculated from track width
+            let wanted_angvel = (self.wheel_speed_left - self.wheel_speed_right) * 0.04;
+            let max_da = 2.0; // TODO: Calculate based on UPS, friction and track width
+            robot_angvel = limit_change(robot_angvel, wanted_angvel, max_da);
+            body.set_angvel(robot_angvel, true);
+
+            /*let robot_velocity = body.linvel();
             let robot_angular_velocity = body.angvel();
             let robot_orientation = body.position().rotation;
             let robot_inverse_orientation = robot_orientation.inverse();
@@ -385,7 +408,14 @@ impl Robot {
                 let right_friction_force = robot_orientation * right_friction_force_local;
                 //println!("right_friction_force: {:?}", right_friction_force);
                 body.add_force_at_point(right_friction_force, right_wheel_position_world, true);
-            }
+            }*/
+
+            // TODO: Remove
+            //body.add_force_at_point(Vector2::new(1.0, 0.0), Point2::<f32>::new(100.0, 100.0), true);
+            //let mut p = Point2::<f32>::new(0.0, 0.0);
+            //body.position().translation.transform_point(&mut p);
+            //body.add_force_at_point(Vector2::new(frictional_force_magnitude, 0.0), p, true);
+            //body.add_force_at_point(Vector2::new(1.0, 0.0), p, true);
         }
 
         if let Some(blade_handle) = self.blade_handle {
@@ -654,7 +684,7 @@ impl KeyboardController {
 impl BrainInterface for KeyboardController {
     fn update(&mut self, robot: &mut dyn RobotInterface) {
         let speed = 100.0;
-        let turn_speed = 25.0;
+        let turn_speed = 100.0;
 
         let mut wheel_speed_left = 0.0;
         let mut wheel_speed_right = 0.0;
