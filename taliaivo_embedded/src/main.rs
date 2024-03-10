@@ -22,6 +22,7 @@ use stm32f4xx_hal::{
     },
     dma::{config::DmaConfig, PeripheralToMemory, Stream0, StreamsTuple, Transfer},
     pac::{ADC1, DMA2, TIM2, USART2},
+    timer::{Timer, pwm_input::PwmInput},
 };
 use rtic::app;
 use rtic_monotonics::systick::*;
@@ -266,6 +267,8 @@ fn set_motor_speeds(
     }
 }
 
+// PWM input
+
 // Main program
 
 #[app(device = stm32f4xx_hal::pac, peripherals = true, dispatchers = [UART4, UART5, USART6])]
@@ -291,6 +294,7 @@ mod app {
         drive_mode: DriveMode,
         vbat_lowpass: f32,
         log_sensors: bool,
+        servo_in1: PwmInput<pac::TIM9>,
     }
 
     #[local]
@@ -332,6 +336,7 @@ mod app {
         let gpiob = cx.device.GPIOB.split();
         let gpioc = cx.device.GPIOC.split();
         let gpiod = cx.device.GPIOD.split();
+        let gpioe = cx.device.GPIOE.split();
 
         let mut led_pin = gpioa.pa8.into_push_pull_output();
         led_pin.set_high();
@@ -506,6 +511,13 @@ mod app {
             dma_config
         );
 
+        // Servo PWM timer inputs
+        // SERVO_IN1 = PE5 = TIM9_CH1
+        // SERVO_IN2 = PC6 = TIM8_CH1, TIM3_CH1
+        let pe5_tim9_ch1 = gpioe.pe5.into_alternate::<3>();
+        let timer9 = Timer::<pac::TIM9>::new(cx.device.TIM9, &clocks);
+        let servo_in1 = timer9.pwm_input(500.Hz(), pe5_tim9_ch1);
+
         // Schedule tasks
 
         algorithm_task::spawn().ok();
@@ -527,6 +539,7 @@ mod app {
                 drive_mode: DriveMode::Normal,
                 vbat_lowpass: 0.0,
                 log_sensors: false,
+                servo_in1: servo_in1,
             },
             Local {
                 led_pin: led_pin,
@@ -557,6 +570,7 @@ mod app {
             drive_mode,
             vbat_lowpass,
             log_sensors,
+            servo_in1,
         ],
         local = [
             motor_pwm,
@@ -603,6 +617,14 @@ mod app {
         //let interval_ms = 1000;
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
+
+            cx.shared.servo_in1.lock(|servo_in1| {
+                let duty_clocks = servo_in1.get_duty_cycle_clocks();
+                let period_clocks = servo_in1.get_period_clocks();
+                if servo_in1.is_valid_capture() {
+                    info!("Servo input 1: {:?} / {:?}", duty_clocks, period_clocks);
+                }
+            });
 
             let mut vbat = 0.0;
             let mut vbat_lowpass = 0.0;
