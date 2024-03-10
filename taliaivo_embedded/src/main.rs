@@ -695,6 +695,13 @@ mod app {
                 }
             });
 
+            // Start ADC
+            cx.shared.adc_transfer.lock(|transfer| {
+                transfer.start(|adc| {
+                    adc.start_conversion();
+                });
+            });
+
             let acc = cx.local.mpu.get_acc();
             //info!("MPU6050: acc: {:?}", acc);
             if let Ok(acc) = acc {
@@ -777,13 +784,6 @@ mod app {
             if additional_delay > 0 {
                 Systick::delay((additional_delay as u32).millis()).await;
             }
-
-            // Start ADC
-            cx.shared.adc_transfer.lock(|transfer| {
-                transfer.start(|adc| {
-                    adc.start_conversion();
-                });
-            });
         }
     }
 
