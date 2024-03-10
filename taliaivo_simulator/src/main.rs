@@ -221,8 +221,11 @@ impl Robot {
             wheel_speed_right: 0.0,
             // NOTE: These seem to be the wrong way around in X, but this way
             //       replays do the correct thing
-            left_wheel_position: Point2::new(5.0, 2.0), // -X=left, -Y=front
-            right_wheel_position: Point2::new(-5.0, 2.0),
+            // NOTE: These positions are totally wrong (actually the width
+            //       should be +-5cm, but this represents better how the robot
+            //       moves in reality)
+            left_wheel_position: Point2::new(15.0, 2.0), // -X=left, -Y=front
+            right_wheel_position: Point2::new(-15.0, 2.0),
             weapon_throttle: 0.0,
             proximity_sensor_readings: ArrayVec::new(),
             gyro_z: 0.0,
