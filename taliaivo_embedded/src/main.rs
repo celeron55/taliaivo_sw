@@ -790,10 +790,14 @@ mod app {
     #[task(priority = 2, shared = [millis_counter], local = [])]
     async fn millis_counter_task(mut cx: millis_counter_task::Context) {
         loop {
+            // NOTE: When incrementing by 1, the counter runs at roughly 50%
+            //       speed compared to realtime
+            // NOTE: When incrementing by 5, the counter runs at roughly 95%
+            //       speed compared to realtime
             cx.shared.millis_counter.lock(|value| {
-                *value = *value + 1;
+                *value = *value + 5;
             });
-            Systick::delay(1.millis()).await;
+            Systick::delay(5.millis()).await;
         }
     }
 
