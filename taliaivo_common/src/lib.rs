@@ -206,6 +206,7 @@ pub struct BrainState {
     enemy_history: ConstGenericRingBuffer::<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
     gyro_based_rotation_speed_filtered: f32,
     wheel_based_rotation_speed_filtered: f32,
+    u_turn_direction: f32,
 }
 
 impl BrainState {
@@ -231,6 +232,7 @@ impl BrainState {
             enemy_history: ConstGenericRingBuffer::new(),
             gyro_based_rotation_speed_filtered: 0.0,
             wheel_based_rotation_speed_filtered: 0.0,
+            u_turn_direction: -1.0,
         }
     }
 
@@ -767,22 +769,26 @@ impl BrainState {
     }
 
     // Returns a value suitable for wanted_rotation_speed
-    pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32,
+    pub fn steer_towards_absolute_angle(&mut self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
         let angle_diff = wrap_angle(((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI);
         /*info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
                 target_angle_rad, self.rot, angle_diff);*/
         let speed_factor = 0.2 + (angle_diff.abs() / PI * 0.8);
-        if angle_diff < 0.0 {
+        if angle_diff < PI || angle_diff > PI {
+            return self.u_turn_direction * max_rotation_speed;
+        } else if angle_diff < 0.0 {
+            self.u_turn_direction = -1.0;
             return speed_factor * max_rotation_speed;
         } else {
+            self.u_turn_direction = 1.0;
             return speed_factor * -max_rotation_speed;
         }
     }
 
     // Returns a value suitable for wanted_linear_speed and wanted_rotation_speed
     // Prioritizes steering first, then picks up speed
-    pub fn drive_towards_absolute_position(&self, target_p: Point2<f32>,
+    pub fn drive_towards_absolute_position(&mut self, target_p: Point2<f32>,
             max_linear_speed: f32, max_rotation_speed: f32,
             allow_overshoot: bool) -> (f32, f32) {
         let u = target_p - self.pos;
