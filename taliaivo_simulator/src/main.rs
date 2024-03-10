@@ -800,7 +800,7 @@ fn main() {
                         (GROUP_ROBOT1_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())));
     }
-    if robots.len() >= 1 && ENABLE_ROBOT_WEAPON[0] {
+    if robots.len() >= 1 && ENABLE_ROBOT_WEAPON[0] && match cli.replay { Some(_) => false, _ => true }{
         robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
                 10.0, 2.0, 0.0, point![0.0, 4.0],
                 InteractionGroups::new(
