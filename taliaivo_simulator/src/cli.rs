@@ -4,12 +4,15 @@ use std::path::PathBuf;
 #[derive(Parser)]
 #[command(version)]
 pub struct Cli {
-	/// Arena side length
+    /// Arena side length
     #[arg(short, long, default_value_t = 125.0)]
-	pub arena_size: f32,
+    pub arena_size: f32,
 
-	/// Replay log file
+    /// Replay log file
     #[arg(short, long, value_name = "FILE")]
-	pub replay: Option<PathBuf>,
+    pub replay: Option<PathBuf>,
     
+    /// Enable second robot
+    #[arg(short, long, default_value_t = false)]
+    pub enable_second_robot: bool,
 }

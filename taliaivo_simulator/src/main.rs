@@ -754,7 +754,7 @@ fn main() {
         ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
     ];
 
-    let enable_second_robot = match cli.replay { Some(_) => false, _ => true };
+    let enable_second_robot = cli.enable_second_robot && match cli.replay { Some(_) => false, _ => true };
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
