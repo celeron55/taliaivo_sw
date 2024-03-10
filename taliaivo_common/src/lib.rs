@@ -8,7 +8,6 @@ use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
-//use libc_print::std_name::println;
 use micromath::F32Ext; // f32.sin and f32.cos
 use log::{Record, Metadata, Log, info, warn};
 pub use map::*;
@@ -210,7 +209,6 @@ pub struct BrainState {
 
 impl BrainState {
     pub fn new(seed: u32) -> Self {
-        info!("BrainState::new()");  // TODO: Remove
         BrainState {
             seed: seed,
             counter: 0,
@@ -255,15 +253,15 @@ impl BrainState {
 
         let servo_inputs = robot.get_rc_input_values();
         let robot_enabled = servo_inputs[0] > 0.5;
-        info!("servo_inputs: {:?}, robot_enabled: {:?}", servo_inputs, robot_enabled);
+        //info!("servo_inputs: {:?}, robot_enabled: {:?}", servo_inputs, robot_enabled);
 
         let track = robot.get_track_width();
         let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
         let robot_direction_vector = Vector2::new(self.rot.cos(), self.rot.sin());
-        //println!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
+        //info!("At: p(tiles)={:?}, direction={:?}", robot_tile_position, robot_direction_vector);
 
         let (_gyro_x, _gyro_y, gyro_z) = robot.get_gyroscope_reading();
-        //println!("gyro_z: {:?}", gyro_z);
+        //info!("gyro_z: {:?}", gyro_z);
 
         // Calculate current rotation speed based on the gyroscope, and based on
         // wheel speeds.
@@ -277,7 +275,7 @@ impl BrainState {
 
         // If gyro and wheel based rotation speeds don't match, accelerate map
         // forgetting to clear out now invalid data.
-        /*println!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
+        /*info!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
                 self.gyro_based_rotation_speed_filtered, self.wheel_based_rotation_speed_filtered);*/
         // TODO: Do something similar based on the accelerometer
         // TODO: Make useful and re-enable (gyro and wheel speeds have to be in
@@ -315,14 +313,14 @@ impl BrainState {
 
         self.proximity_sensor_readings = robot.get_proximity_sensors();
 
-        //println!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
+        //info!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
 
         for reading in &self.proximity_sensor_readings {
             let maybe_newly_occupied = self.map.paint_proximity_reading(
                     self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
             if AGGRESSIVENESS > 0.01 {
                 if let Some(newly_occupied_p) = maybe_newly_occupied {
-                    //println!("Newly occupied: {:?}", newly_occupied_p);
+                    //info!("Newly occupied: {:?}", newly_occupied_p);
                     // Filter out point if it is close to a wall
                     let newly_occupied_p_f = Point2::new(
                             newly_occupied_p.x as f32,
@@ -343,9 +341,9 @@ impl BrainState {
                                 AGGRESSIVENESS >= 0.5 {
                             self.enemy_history.push((self.counter, newly_occupied_p_world));
                         }
-                        //println!("Isn't close to wall");
+                        //info!("Isn't close to wall");
                     } else {
-                        //println!("Is close to wall");
+                        //info!("Is close to wall");
                     }
                 }
             }
@@ -353,7 +351,7 @@ impl BrainState {
 
         self.wall_lines = self.map.hough_transform();
         /*for line in &self.wall_lines {
-            println!("HoughLine: angle={:?} distance={:?} votes={:?}",
+            info!("HoughLine: angle={:?} distance={:?} votes={:?}",
                     line.angle, line.distance, line.votes);
         }*/
 
@@ -376,7 +374,7 @@ impl BrainState {
             if let Some(intersection_point_tiles) = calculate_intersection(
                     robot_tile_position, robot_direction_vector, &line) {
                 let distance_tiles = (robot_tile_position - intersection_point_tiles).magnitude();
-                /*println!("On trajectory to hit: p(tiles)={:?}, distance(tiles)={:?}",
+                /*info!("On trajectory to hit: p(tiles)={:?}, distance(tiles)={:?}",
                         intersection_point_tiles, distance_tiles);*/
                 let distance = distance_tiles * self.map.tile_wh;
                 let _intersection_point = intersection_point_tiles * self.map.tile_wh;
@@ -386,7 +384,7 @@ impl BrainState {
             }
         }
         /*if self.shortest_wall_head_on_distance < f32::MAX {
-            println!("Shortest distance to head-on wall collision: {:?}",
+            info!("Shortest distance to head-on wall collision: {:?}",
                     self.shortest_wall_head_on_distance);
         }*/
 
@@ -405,7 +403,7 @@ impl BrainState {
             }
         }
         /*if self.wall_avoidance_vector.magnitude() > 0.0 {
-            println!("Walls (shortest distance: {:?}) would be best avoided by moving towards: {:?}",
+            info!("Walls (shortest distance: {:?}) would be best avoided by moving towards: {:?}",
                     self.shortest_wall_distance, self.wall_avoidance_vector);
         }*/
 
@@ -574,7 +572,7 @@ impl BrainState {
                 &pattern, pattern_w, pattern_h, 30.0, 0.5, Some(&weights), wall_filter);
         if let Some(result) = result_maybe {
             let score = result.2;
-            //println!("score: {:?}", score);
+            //info!("score: {:?}", score);
             if score < score_requirement {
                 // Target the center of the pattern
                 let target_p = Point2::new(
@@ -582,8 +580,8 @@ impl BrainState {
                     (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
                 );
                 self.enemy_history.push((self.counter, target_p.clone()));
-                //println!("enemy_history.len(): {:?}", self.enemy_history.len());
-                //println!("attack {:?}", target_p);
+                //info!("enemy_history.len(): {:?}", self.enemy_history.len());
+                //info!("attack {:?}", target_p);
                 //return self.create_attack_motion(target_p);
             }
         }
@@ -601,7 +599,7 @@ impl BrainState {
         // Avoid walls as a higher priority than scanning
         if self.shortest_wall_distance < WALL_AVOID_DISTANCE_ANY_DIRECTION ||
                 self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON {
-            //println!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
+            //info!("Avoiding walls by moving towards: {:?}", self.wall_avoidance_vector);
             let target_p = self.pos + self.wall_avoidance_vector.normalize() *
                     WALL_AVOID_DISTANCE_HEAD_ON;
             self.wall_avoid_p = Some(target_p);
@@ -639,14 +637,14 @@ impl BrainState {
             let mut wanted_rotation_speed = PI * 0.0;
             let d = WALL_AVOID_DISTANCE_ANY_DIRECTION;
             if d0 < d {
-                //println!("Stupid hit avoidance logic: Reverse");
+                //info!("Stupid hit avoidance logic: Reverse");
                 wanted_linear_speed = -MAX_LINEAR_SPEED * 0.5;
             } else if d2 < d {
                 // NOTE: Prefer turning left
-                //println!("Stupid hit avoidance logic: Turn left");
+                //info!("Stupid hit avoidance logic: Turn left");
                 wanted_rotation_speed = -MAX_ROTATION_SPEED * 0.5;
             } else if d1 < d {
-                //println!("Stupid hit avoidance logic: Turn right");
+                //info!("Stupid hit avoidance logic: Turn right");
                 wanted_rotation_speed = MAX_ROTATION_SPEED * 0.5;
             }
             if wanted_linear_speed != 0.0 || wanted_rotation_speed != 0.0 {
@@ -654,7 +652,7 @@ impl BrainState {
             }
         }
 
-        //println!("scan");
+        //info!("scan");
         self.attack_step_count = 0;
         return self.create_scanning_motion();
     }
@@ -717,7 +715,7 @@ impl BrainState {
                 (result.0 + pattern_w / 2) as f32 * self.map.tile_wh,
                 (result.1 + pattern_h / 2) as f32 * self.map.tile_wh,
             );
-            //println!("target_p: {:?}", target_p);
+            //info!("target_p: {:?}", target_p);
             self.scan_p = Some(target_p);
             // Drive towards that spot
             let (wanted_linear_speed, mut wanted_rotation_speed) =
@@ -769,7 +767,7 @@ impl BrainState {
     pub fn steer_towards_absolute_angle(&self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
         let angle_diff = wrap_angle(((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI);
-        /*println!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
+        /*info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
                 target_angle_rad, self.rot, angle_diff);*/
         let speed_factor = 0.2 + (angle_diff.abs() / PI * 0.8);
         if angle_diff < 0.0 {
