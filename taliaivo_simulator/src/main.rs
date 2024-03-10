@@ -2,13 +2,14 @@ use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
-use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface};
+use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface, NUM_SERVO_INPUTS};
 use arrayvec::ArrayVec;
 use taliaivo_common::map::HoughLine;
 use rand::distributions::{Distribution, Uniform};
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::path::Path;
+use log::{Record, Metadata, Log, info, warn};
 
 mod cli;
 use cli::Cli;
@@ -122,6 +123,7 @@ struct Robot {
     diagnostic_wall_avoid_p: Option<Point2<f32>>,
     diagnostic_wall_lines: Vec<HoughLine>,
     interaction_groups: InteractionGroups,
+    servo_in1: f32,
 }
 
 struct ArenaWall {
@@ -148,8 +150,8 @@ impl RobotInterface for Robot {
 
     // R/C Receiver Inputs
     // Returns values from all R/C receiver channels
-    fn get_rc_input_values(&self, _values: &mut[&f32]) {
-        // TODO
+    fn get_rc_input_values(&self) -> [f32; NUM_SERVO_INPUTS] {
+        [self.servo_in1, 0.0, 0.0]
     }
 
     // Sensor readings
@@ -233,6 +235,7 @@ impl Robot {
             diagnostic_wall_avoid_p: None,
             diagnostic_wall_lines: Vec::new(),
             interaction_groups: interaction_groups,
+            servo_in1: 0.8,
         }
     }
 
@@ -703,6 +706,14 @@ impl BrainInterface for DummyController {
 fn main() {
 	let cli = Cli::parse();
 
+    stderrlog::new()
+        .verbosity(log::LevelFilter::Info) // TODO: Adjust as needed
+        .show_module_names(true)
+        .module(module_path!())
+        .module("taliaivo_common")
+        .init().unwrap();
+    log::set_max_level(log::LevelFilter::Info); // TODO: Adjust as needed
+
     let mut window: PistonWindow = WindowSettings::new("Taliaivo Simulator", [1200, 600])
         .exit_on_esc(true)
         .build()
@@ -944,6 +955,12 @@ fn main() {
                         RobotController::Dummy => RobotController::Keyboard,
                         RobotController::Keyboard => RobotController::Brain,
                     }
+                },
+                Key::S => {
+                    robots[0].servo_in1 = if robots[0].servo_in1 < 0.5 { 0.8 } else { 0.2 }
+                },
+                Key::D => {
+                    robots[1].servo_in1 = if robots[1].servo_in1 < 0.5 { 0.8 } else { 0.2 }
                 },
                 Key::Space => {
                     paused = !paused;

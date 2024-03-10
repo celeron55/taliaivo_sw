@@ -49,7 +49,7 @@ use core::f64::consts::PI;
 //use defmt::{panic, *};
 //use {defmt_rtt as _, panic_probe as _};
 
-use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface};
+use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface, NUM_SERVO_INPUTS};
 use taliaivo_common::map::HoughLine;
 
 mod command_accumulator;
@@ -59,6 +59,7 @@ const MAX_PWM: f32 = 0.40;
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
 const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
 const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
+const SERVO_TIMEOUT_S: f32 = 1.0;
 
 struct Robot {
     wheel_speed_left: f32,
@@ -67,6 +68,7 @@ struct Robot {
     acc: Vector3<f32>,
     gyro: Vector3<f32>,
     battery_voltage: f32,
+    servo_in1: f32,
 }
 
 impl Robot {
@@ -78,6 +80,7 @@ impl Robot {
             acc: Vector3::new(0.0, 0.0, 0.0),
             gyro: Vector3::new(0.0, 0.0, 0.0),
             battery_voltage: 0.0,
+            servo_in1: 0.0,
         }
     }
 }
@@ -102,8 +105,8 @@ impl RobotInterface for Robot {
 
     // R/C Receiver Inputs
     // Returns values from all R/C receiver channels
-    fn get_rc_input_values(&self, _values: &mut[&f32]) {
-        // TODO
+    fn get_rc_input_values(&self) -> [f32; NUM_SERVO_INPUTS] {
+        [self.servo_in1, 0.0, 0.0]
     }
 
     // Sensor readings
@@ -307,6 +310,8 @@ mod app {
         motor_pwm: MotorPwm,
         adc_buffer: Option<&'static mut [u16; ADC_NUM_CHANNELS]>,
         mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
+        servo_in1_last_period: u16,
+        servo_in1_timeout_counter: u32,
     }
 
     #[init(
@@ -550,6 +555,8 @@ mod app {
                 motor_pwm: motor_pwm,
                 adc_buffer: Some(cx.local.adc_buffer2),
                 mpu: mpu,
+                servo_in1_last_period: 0,
+                servo_in1_timeout_counter: 0,
             }
         )
     }
@@ -575,6 +582,8 @@ mod app {
         local = [
             motor_pwm,
             mpu,
+            servo_in1_last_period,
+            servo_in1_timeout_counter,
         ]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
@@ -618,13 +627,35 @@ mod app {
         loop {
             let t0 = cx.shared.millis_counter.lock(|value|{ *value });
 
+            // Servo inputs
+
+            *cx.local.servo_in1_timeout_counter += 1;
             cx.shared.servo_in1.lock(|servo_in1| {
                 let duty_clocks = servo_in1.get_duty_cycle_clocks();
                 let period_clocks = servo_in1.get_period_clocks();
                 if servo_in1.is_valid_capture() {
-                    info!("Servo input 1: {:?} / {:?}", duty_clocks, period_clocks);
+                    // The range of values is roughly 27800...53200
+                    // When the receiver stops giving out pulses in its failsafe
+                    // mode, period_clocks stops containing noise. This is used
+                    // to detect loss of transmitter signal or a broken
+                    // receiver.
+                    //info!("Servo input 1: {:?} / {:?}", duty_clocks, period_clocks);
+                    if period_clocks != *cx.local.servo_in1_last_period {
+                        *cx.local.servo_in1_timeout_counter = 0;
+                    }
+                    *cx.local.servo_in1_last_period = period_clocks;
+                }
+                robot.servo_in1 = {
+                    if *cx.local.servo_in1_timeout_counter <
+                            (taliaivo_common::UPS as f32 * SERVO_TIMEOUT_S) as u32 {
+                        (duty_clocks as f32 - 27800.0) / (53200.0 - 27800.0)
+                    } else {
+                        0.0
+                    }
                 }
             });
+
+            // ADC
 
             let mut vbat = 0.0;
             let mut vbat_lowpass = 0.0;

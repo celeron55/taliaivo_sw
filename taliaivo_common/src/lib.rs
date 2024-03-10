@@ -10,6 +10,7 @@ use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 //use libc_print::std_name::println;
 use micromath::F32Ext; // f32.sin and f32.cos
+use log::{Record, Metadata, Log, info, warn};
 pub use map::*;
 
 pub const UPS: u32 = 50; // Updates per second
@@ -19,6 +20,10 @@ const ENEMY_HISTORY_LENGTH: usize = 50;
 // TODO: Remember to adjust this for the target arena
 const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
 //const ARENA_DIMENSION: f32 = 70.0; // cm. Used to predict opposing walls.
+
+// Weapon configuration
+//const WEAPON_THROTTLE: f32 = 100.0;
+const WEAPON_THROTTLE: f32 = 20.0;
 
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
@@ -40,6 +45,8 @@ const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
 
 const MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE: f32 = 3.2;
 
+pub const NUM_SERVO_INPUTS: usize = 3;
+
 pub trait RobotInterface {
     // Capabilities and dimensions
     fn get_track_width(&self) -> f32;
@@ -52,7 +59,7 @@ pub trait RobotInterface {
     fn set_weapon_throttle(&mut self, throttle_percentage: f32); // -100 to +100
 
     // R/C Receiver Inputs
-    fn get_rc_input_values(&self, values: &mut[&f32]); // Returns values from all R/C receiver channels
+    fn get_rc_input_values(&self) -> [f32; NUM_SERVO_INPUTS]; // Returns values from all R/C receiver channels
 
     // Sensor readings
     fn get_weapon_current(&self) -> f32; // Current in Amperes
@@ -203,6 +210,7 @@ pub struct BrainState {
 
 impl BrainState {
     pub fn new(seed: u32) -> Self {
+        info!("BrainState::new()");  // TODO: Remove
         BrainState {
             seed: seed,
             counter: 0,
@@ -244,6 +252,10 @@ impl BrainState {
 
         // 0.998 works for keeping up to date with a 125x125cm arena
         self.map.global_forget(1.0 - 0.002 * (125.0 / ARENA_DIMENSION));
+
+        let servo_inputs = robot.get_rc_input_values();
+        let robot_enabled = servo_inputs[0] > 0.5;
+        info!("servo_inputs: {:?}, robot_enabled: {:?}", servo_inputs, robot_enabled);
 
         let track = robot.get_track_width();
         let robot_tile_position = self.pos.coords * (1.0 / self.map.tile_wh);
@@ -440,14 +452,21 @@ impl BrainState {
 
         // Stop driving if battery is too low
         let min_battery_cell_v = robot.get_battery_min_cell_voltage();
-        if min_battery_cell_v < MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE {
+        if min_battery_cell_v < MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE || !robot_enabled {
             self.applied_wheel_speed_left = 0.0;
             self.applied_wheel_speed_right = 0.0;
         }
 
         robot.set_motor_speed(self.applied_wheel_speed_left, self.applied_wheel_speed_right);
 
-        let weapon_throttle = 100.0;
+        let weapon_throttle = {
+            if min_battery_cell_v >= MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE &&
+                    robot_enabled {
+                WEAPON_THROTTLE
+            } else {
+                0.0
+            }
+        };
         /*if gyro_z.abs() > 5.0 {
             weapon_throttle = 0.0;
         }*/
