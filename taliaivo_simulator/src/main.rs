@@ -473,9 +473,10 @@ impl Robot {
             ]
         } else if SIMULATE_SWIPING_FRONT_SENSOR {
             [
-                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 45.0 + 45.0,
-                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 45.0 - 45.0,
-                180.0,
+                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 90.0 - 45.0,
+                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 90.0 + 45.0,
+                //180.0,
+                1000.0, // Disabled
                 1000.0, // Disabled
                 1000.0, // Disabled
                 1000.0, // Disabled
