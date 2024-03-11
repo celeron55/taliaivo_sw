@@ -790,8 +790,8 @@ impl BrainState {
     pub fn steer_towards_absolute_angle(&mut self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
         let angle_diff = wrap_angle_plusminus180(target_angle_rad - self.rot);
-        info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
-                target_angle_rad, self.rot, angle_diff);
+        //info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
+        //        target_angle_rad, self.rot, angle_diff);
         let mut speed_factor = (0.2 + (angle_diff.abs() / PI * 5.0)).clamp(0.0, 1.0);
         if angle_diff < -PI || angle_diff > PI {
             return self.u_turn_direction * max_rotation_speed;
