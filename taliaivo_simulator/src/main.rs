@@ -955,14 +955,15 @@ fn main() {
                     //       exact order
                     let proximity_sensor_angles =
                             [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
-                    let adc_indexes = [2, 3, 1, 4, 0, 5];
+                    // TODO: What is this for?
+                    //let adc_indexes = [2, 3, 1, 4, 0, 5];
                     for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                         let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                         let (distance_cm, detected) = {
-                            if sensors[adc_indexes[i]] > 94.0 {
+                            if sensors[i] > 94.0 {
                                 (94.0, false)
                             } else {
-                                (sensors[adc_indexes[i]], true)
+                                (sensors[i], true)
                             }
                         };
                         robot.proximity_sensor_readings.push((
