@@ -962,7 +962,7 @@ fn main() {
                             if sensors[adc_indexes[i]] > 94.0 {
                                 (94.0, false)
                             } else {
-                                (sensors[i], true)
+                                (sensors[adc_indexes[i]], true)
                             }
                         };
                         robot.proximity_sensor_readings.push((
