@@ -17,11 +17,11 @@ use stm32f4xx_hal::{
     pac as pac,
     otg_fs,
     adc::{
-        config::{AdcConfig, Clock, Dma, Resolution, SampleTime, Scan, Sequence},
+        config::{AdcConfig, Clock, Resolution, SampleTime},
         Adc,
     },
     dma::{config::DmaConfig, PeripheralToMemory, Stream0, StreamsTuple, Transfer},
-    pac::{ADC1, DMA2, TIM2, USART2},
+    pac::{ADC1, TIM2, USART2},
     timer::{Timer, pwm_input::PwmInput},
 };
 use rtic::app;
@@ -224,11 +224,9 @@ fn init_logger() {
     log::set_max_level(log::LevelFilter::Info); // TODO: Adjust as needed
 }
 
-// ADC DMA
+// ADC
 
 const ADC_NUM_CHANNELS: usize = 7;
-type AdcDmaTransfer = Transfer<Stream0<DMA2>, 0, Adc<ADC1>, PeripheralToMemory,
-        &'static mut [u16; ADC_NUM_CHANNELS]>;
 
 fn adc_scale_vbat(raw: u16) -> f32 {
     return raw as f32 / 4096.0 * (1.0+100.0/4.7) * 3.3;
@@ -292,7 +290,6 @@ mod app {
         console_rxbuf: ConstGenericRingBuffer<u8, 1024>,
         usb_dev: UsbDevice<'static, otg_fs::UsbBusType>,
         usb_serial: usbd_serial::SerialPort<'static, otg_fs::UsbBusType>,
-        adc_transfer: AdcDmaTransfer,
         adc_result: [u16; ADC_NUM_CHANNELS],
         drive_mode: DriveMode,
         vbat_lowpass: f32,
@@ -308,16 +305,21 @@ mod app {
         usart1_txbuf: ConstGenericRingBuffer<u8, 1024>,
         command_accumulator: CommandAccumulator<50>,
         motor_pwm: MotorPwm,
-        adc_buffer: Option<&'static mut [u16; ADC_NUM_CHANNELS]>,
         mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
         servo_in1_last_period: u16,
         servo_in1_timeout_counter: u32,
+        adc: Adc<ADC1>,
+        adc1_c0: gpio::Pin<'A', 0, gpio::Analog>,
+        adc1_c1: gpio::Pin<'A', 1, gpio::Analog>,
+        adc1_c2: gpio::Pin<'A', 2, gpio::Analog>,
+        adc1_c3: gpio::Pin<'A', 3, gpio::Analog>,
+        adc1_c4: gpio::Pin<'A', 4, gpio::Analog>,
+        adc1_c5: gpio::Pin<'A', 5, gpio::Analog>,
+        adc1_c14: gpio::Pin<'C', 4, gpio::Analog>,
     }
 
     #[init(
         local = [
-            adc_buffer1: [u16; ADC_NUM_CHANNELS] = [0; ADC_NUM_CHANNELS],
-            adc_buffer2: [u16; ADC_NUM_CHANNELS] = [0; ADC_NUM_CHANNELS]
         ]
     )]
     fn init(cx: init::Context) -> (Shared, Local) {
@@ -488,33 +490,11 @@ mod app {
         let adc1_c14 = gpioc.pc4.into_analog();
 
         let adc_config = AdcConfig::default()
-            .dma(Dma::Continuous)
-            .scan(Scan::Enabled)
             .resolution(Resolution::Twelve)
             .clock(Clock::Pclk2_div_8);
 
         let mut adc = Adc::adc1(cx.device.ADC1, true, adc_config);
-        adc.configure_channel(&adc1_c0, Sequence::One, SampleTime::Cycles_480);
-        adc.configure_channel(&adc1_c1, Sequence::Two, SampleTime::Cycles_480);
-        adc.configure_channel(&adc1_c2, Sequence::Three, SampleTime::Cycles_480);
-        adc.configure_channel(&adc1_c3, Sequence::Four, SampleTime::Cycles_480);
-        adc.configure_channel(&adc1_c4, Sequence::Five, SampleTime::Cycles_480);
-        adc.configure_channel(&adc1_c5, Sequence::Six, SampleTime::Cycles_480);
-        adc.configure_channel(&adc1_c14, Sequence::Seven, SampleTime::Cycles_480);
-
-        let dma = StreamsTuple::new(cx.device.DMA2);
-        let dma_config = DmaConfig::default()
-            .transfer_complete_interrupt(true)
-            .memory_increment(true)
-            .double_buffer(false);
-
-        let adc_transfer = Transfer::init_peripheral_to_memory(
-            dma.0,
-            adc,
-            cx.local.adc_buffer1,
-            None,
-            dma_config
-        );
+        let sample = adc.convert(&adc1_c0, SampleTime::Cycles_480);
 
         // Servo PWM timer inputs
         // SERVO_IN1 = PE5 = TIM9_CH1
@@ -528,6 +508,7 @@ mod app {
         algorithm_task::spawn().ok();
         millis_counter_task::spawn().ok();
         led_task::spawn().ok();
+        adc_task::spawn().ok();
         console_command_task::spawn().ok();
 
         // Initialize context
@@ -539,7 +520,6 @@ mod app {
                 console_rxbuf: ConstGenericRingBuffer::new(),
                 usb_dev: usb_dev,
                 usb_serial: usb_serial,
-                adc_transfer: adc_transfer,
                 adc_result: [0; ADC_NUM_CHANNELS],
                 drive_mode: DriveMode::Normal,
                 vbat_lowpass: 0.0,
@@ -553,10 +533,17 @@ mod app {
                 usart1_txbuf: ConstGenericRingBuffer::new(),
                 command_accumulator: CommandAccumulator::new(),
                 motor_pwm: motor_pwm,
-                adc_buffer: Some(cx.local.adc_buffer2),
                 mpu: mpu,
                 servo_in1_last_period: 0,
                 servo_in1_timeout_counter: 0,
+                adc: adc,
+                adc1_c0: adc1_c0,
+                adc1_c1: adc1_c1,
+                adc1_c2: adc1_c2,
+                adc1_c3: adc1_c3,
+                adc1_c4: adc1_c4,
+                adc1_c5: adc1_c5,
+                adc1_c14: adc1_c14,
             }
         )
     }
@@ -572,7 +559,6 @@ mod app {
         shared = [
             millis_counter,
             wanted_led_state,
-            adc_transfer,
             adc_result,
             drive_mode,
             vbat_lowpass,
@@ -589,18 +575,8 @@ mod app {
     async fn algorithm_task(mut cx: algorithm_task::Context) {
         // Figure out what drive mode to go into initially
         {
-            // Wait for a bit
-            Systick::delay(10.millis()).await;
-
-            // Start ADC
-            cx.shared.adc_transfer.lock(|transfer| {
-                transfer.start(|adc| {
-                    adc.start_conversion();
-                });
-            });
-
-            // Wait for a bit
-            Systick::delay(10.millis()).await;
+            // Wait for the ADC task to read all channels
+            Systick::delay(20.millis()).await;
 
             // Now we can check the battery voltage and determine whether we're
             // being powered by:
@@ -610,6 +586,7 @@ mod app {
             //   -> Go into normal mode
             let vbat = cx.shared.adc_result.lock(|adc_result| {
                     adc_scale_vbat(adc_result[6]) });
+            info!("-!- Initial vbat: {:?}", vbat);
             let initial_mode = if vbat < 6.0 {
                 DriveMode::Stop
             } else {
@@ -693,13 +670,6 @@ mod app {
                             distance_cm + SENSOR_MOUNT_RADIUS_CM,
                             detected));
                 }
-            });
-
-            // Start ADC
-            cx.shared.adc_transfer.lock(|transfer| {
-                transfer.start(|adc| {
-                    adc.start_conversion();
-                });
             });
 
             let acc = cx.local.mpu.get_acc();
@@ -847,6 +817,46 @@ mod app {
         }
     }
 
+    #[task(priority = 2,
+        shared = [
+            adc_result,
+        ],
+        local = [
+            adc,
+            adc1_c0,
+            adc1_c1,
+            adc1_c2,
+            adc1_c3,
+            adc1_c4,
+            adc1_c5,
+            adc1_c14,
+        ]
+    )]
+    async fn adc_task(mut cx: adc_task::Context) {
+        loop {
+            // NOTE: DMA seemed to work, until it stopped after an essentially
+            // random amount of time. Thus, we are doing it this way.
+            // TODO: Try to do this at least a bit asynchronously or move this
+            // to the algorithm task to synchronize to the algorithm
+
+            let mut result: [u16; ADC_NUM_CHANNELS] = [0; ADC_NUM_CHANNELS];
+
+            result[0] = cx.local.adc.convert(cx.local.adc1_c0, SampleTime::Cycles_480);
+            result[1] = cx.local.adc.convert(cx.local.adc1_c1, SampleTime::Cycles_480);
+            result[2] = cx.local.adc.convert(cx.local.adc1_c2, SampleTime::Cycles_480);
+            result[3] = cx.local.adc.convert(cx.local.adc1_c3, SampleTime::Cycles_480);
+            result[4] = cx.local.adc.convert(cx.local.adc1_c4, SampleTime::Cycles_480);
+            result[5] = cx.local.adc.convert(cx.local.adc1_c5, SampleTime::Cycles_480);
+            result[6] = cx.local.adc.convert(cx.local.adc1_c14, SampleTime::Cycles_480);
+
+            cx.shared.adc_result.lock(|shared_result| {
+                *shared_result = result.clone();
+            });
+
+            Systick::delay(20.millis()).await;
+        }
+    }
+
     #[task(
         priority = 1,
         shared = [
@@ -979,30 +989,6 @@ mod app {
                 }
             }
         });
-    }
-
-    #[task(binds = DMA2_STREAM0, shared = [adc_transfer, adc_result], local = [adc_buffer])]
-    fn adc_dma(mut cx: adc_dma::Context) {
-        let buffer = cx.shared.adc_transfer.lock(|transfer| {
-            let (buffer, _) = transfer
-                .next_transfer(cx.local.adc_buffer.take().unwrap())
-                .unwrap();
-            buffer
-        });
-
-        // Read out values from buffer
-        let result = buffer.clone();
-
-        // Return buffer to resources pool for next transfer
-        *cx.local.adc_buffer = Some(buffer);
-
-        cx.shared.adc_result.lock(|shared_result| {
-            *shared_result = result.clone();
-        });
-
-        /*info!("ADC result: {:?} {:?} {:?} {:?} {:?} {:?}",
-                result[0], result[1], result[2],
-                result[3], result[4], result[5]);*/
     }
 }
 
