@@ -9,14 +9,13 @@ edition = "2021"
 # Platform specific
 cortex-m = { version = "0.7.6", features = ["inline-asm", "critical-section-single-core"] }
 #cortex-m-rt = "0.7.0"
-#stm32f4xx-hal = { version = "0.20.0", features = ["stm32f407", "rtic2", "usb_fs"] }
-stm32f4xx-hal = { version = "0.20.0", features = ["stm32f407", "rtic2"] }
+stm32f4xx-hal = { version = "0.20.0", features = ["stm32f407", "rtic2", "usb_fs"] }
 embedded-hal = "1.0.0"
 #cortex-m-rtic = { version = "1.1.4" } # This is what you would use for RTIC 1.0/1.1
 rtic = { version = "2.0.1", features = ["thumbv7-backend"] }
 rtic-monotonics = { version = "1.5.0", features = ["cortex-m-systick"] }
-#usb-device = "0.3.1"
-#usbd-serial = "0.2.0"
+usb-device = "0.3.1"
+usbd-serial = "0.2.0"
 mpu6050 = "0.1.6"
 
 # Generic embedded
