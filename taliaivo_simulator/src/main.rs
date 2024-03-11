@@ -801,14 +801,14 @@ fn main() {
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
-                asize*0.8, asize*0.8, 10.0, 11.5, (PI*1.0) as f32, Vector2::new(0.0, 0.0), 0.0,
+                asize*0.3, asize*0.3, 10.0, 11.5, PI as f32 * 1.75, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ROBOT0_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT1_BODY | GROUP_ROBOT1_WEAPON).into())),
     ];
     if enable_secondary_robot {
         robots.push(Robot::new(&mut rigid_body_set, &mut collider_set,
-                asize*0.96, asize*0.96, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
+                asize*0.9, asize*0.9, 8.0, 9.0, PI as f32 * 0.75, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ROBOT1_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())));
