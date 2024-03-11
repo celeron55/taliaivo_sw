@@ -21,13 +21,13 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 33; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
-const ENABLE_ROBOT_WEAPON: [bool; 2] = [true, false];
 const ENABLE_ROBOT_BRAIN: [bool; 2] = [true, false];
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
 const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
 const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
 
 const SIMULATE_LIDAR: bool = false;
+const SIMULATE_SWIPING_FRONT_SENSOR: bool = false;
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
 const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
 const GYRO_SENSOR_NOISE_MIN: f32 = PI as f32 * -0.1;
@@ -470,6 +470,15 @@ impl Robot {
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
             ]
+        } else if SIMULATE_SWIPING_FRONT_SENSOR {
+            [
+                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 45.0 + 45.0,
+                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 45.0 - 45.0,
+                180.0,
+                1000.0, // Disabled
+                1000.0, // Disabled
+                1000.0, // Disabled
+            ]
         } else {
             [0.0, -45.0, 45.0, -90.0, 90.0, 180.0]
             //[0.0, -45.0, 45.0, -135.0, 135.0, 180.0]
@@ -481,6 +490,10 @@ impl Robot {
             self.proximity_sensor_readings.clear();
 
             for angle_deg in position_sensor_angles {
+                if angle_deg >= 999.0 {
+                    // Disabled
+                    continue;
+                }
                 let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
 
                 let shape = Ball::new(2.0);
@@ -784,7 +797,7 @@ fn main() {
         ArenaWall::new(&mut rigid_body_set, &mut collider_set, ad+asize/2.0, ad+asize, asize, at),
     ];
 
-    let enable_second_robot = cli.enable_second_robot && match cli.replay { Some(_) => false, _ => true };
+    let enable_secondary_robot = (cli.enable_secondary_robot || cli.enable_secondary_robot_weapon) && match cli.replay { Some(_) => false, _ => true };
 
     let mut robots = vec![
         Robot::new(&mut rigid_body_set, &mut collider_set,
@@ -793,20 +806,20 @@ fn main() {
                         (GROUP_ROBOT0_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT1_BODY | GROUP_ROBOT1_WEAPON).into())),
     ];
-    if enable_second_robot {
+    if enable_secondary_robot {
         robots.push(Robot::new(&mut rigid_body_set, &mut collider_set,
                 asize*0.96, asize*0.96, 8.0, 9.0, 3.0, Vector2::new(0.0, 0.0), 0.0,
                 InteractionGroups::new(
                         (GROUP_ROBOT1_BODY).into(),
                         (GROUP_ARENA | GROUP_ROBOT0_WEAPON | GROUP_ROBOT0_BODY).into())));
     }
-    if robots.len() >= 1 && ENABLE_ROBOT_WEAPON[0] && match cli.replay { Some(_) => false, _ => true }{
+    if robots.len() >= 1 && cli.enable_primary_robot_weapon && match cli.replay { Some(_) => false, _ => true }{
         robots[0].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
                 10.0, 2.0, 0.0, point![0.0, 4.0],
                 InteractionGroups::new(
                         (GROUP_ROBOT0_WEAPON).into(), (GROUP_ROBOT1_BODY | GROUP_ARENA).into()));
     }
-    if robots.len() >= 2 && ENABLE_ROBOT_WEAPON[1] {
+    if robots.len() >= 2 && cli.enable_secondary_robot_weapon {
         robots[1].attach_blade(&mut rigid_body_set, &mut collider_set, &mut impulse_joint_set,
                 8.0, 1.5, 0.0, point![0.0, 3.0],
                 InteractionGroups::new(
@@ -832,7 +845,7 @@ fn main() {
     let mut robot2_controller = if ENABLE_ROBOT_BRAIN[1] {
         RobotController::Brain
     } else {
-        RobotController::Dummy
+        RobotController::Keyboard
     };
 
     let mut counter: u64 = 0;
@@ -840,6 +853,7 @@ fn main() {
     let mut paused = false;
     let mut slow_motion = false;
     let mut slow_motion_counter: u64 = 0;
+    let mut force_stop_robot0_wheels = false;
 
     while let Some(e) = window.next() {
         if e.render_args().is_some() {
@@ -942,7 +956,7 @@ fn main() {
                     for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                         let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                         let (distance_cm, detected) = {
-                            if sensors[i] > 94.0 {
+                            if sensors[adc_indexes[i]] > 94.0 {
                                 (94.0, false)
                             } else {
                                 (sensors[i], true)
@@ -955,6 +969,11 @@ fn main() {
                     }
                 } else {
                     let ref mut robot = robots[0];
+                    if force_stop_robot0_wheels {
+                        brain.force_wheel_speeds(0.0, 0.0);
+                        robot.wheel_speed_left = 0.0;
+                        robot.wheel_speed_right = 0.0;
+                    }
                     robot.update_movement(&mut rigid_body_set, integration_parameters.dt);
                     robot.update_sensors(&mut query_pipeline, &collider_set,
                             &rigid_body_set, counter);
@@ -1002,6 +1021,9 @@ fn main() {
                 },
                 Key::D => {
                     robots[1].servo_in1 = if robots[1].servo_in1 < 0.5 { 0.8 } else { 0.2 }
+                },
+                Key::F => {
+                    force_stop_robot0_wheels = !force_stop_robot0_wheels;
                 },
                 Key::Space => {
                     paused = !paused;

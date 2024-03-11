@@ -11,8 +11,16 @@ pub struct Cli {
     /// Replay log file
     #[arg(short, long, value_name = "FILE")]
     pub replay: Option<PathBuf>,
-    
-    /// Enable second robot
-    #[arg(short, long, default_value_t = false)]
-    pub enable_second_robot: bool,
+
+    /// Enable primary robot weapon
+    #[arg(short = 'w', long, default_value_t = false)]
+    pub enable_primary_robot_weapon: bool,
+
+    /// Enable secondary robot weapon
+    #[arg(short = 's', long, default_value_t = false)]
+    pub enable_secondary_robot_weapon: bool,
+
+    /// Enable secondary robot
+    #[arg(short = 'S', long, default_value_t = false)]
+    pub enable_secondary_robot: bool,
 }

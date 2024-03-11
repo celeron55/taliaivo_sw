@@ -174,8 +174,23 @@ fn tile_is_close_to_wall(p: Point2<f32>,
     return false;
 }
 
-fn wrap_angle(mut a: f32) -> f32 {
+fn wrap_angle_plusminus360(mut a: f32) -> f32 {
     // TODO: Better wrapping
+    // TODO: Maybe something like this?
+    //((a + PI) % (PI * 2.0)) - PI
+    while a < PI * 2.0 {
+        a += PI * 4.0
+    }
+    while a > PI * 2.0 {
+        a -= PI * 4.0
+    }
+    return a
+}
+
+fn wrap_angle_plusminus180(mut a: f32) -> f32 {
+    // TODO: Better wrapping
+    // TODO: Maybe something like this?
+    //((a + PI * 0.5) % (PI)) - PI * 0.5
     while a < PI {
         a += PI * 2.0
     }
@@ -295,7 +310,7 @@ impl BrainState {
         // TODO: The value here should be filtered roughly by the same amount as
         //       the proximity sensors are
         self.rot += gyro_based_rotation_speed_unfiltered / UPS as f32;
-        self.rot = wrap_angle(self.rot);
+        self.rot = wrap_angle_plusminus180(self.rot);
 
         // TODO: If gyro_z doesn't match rotation caused by wheel speeds, assume
         //       a wheel is not touching the ground and act differently?
@@ -526,7 +541,7 @@ impl BrainState {
         // NOTE: With 4 required true tiles with 1.0 weights, every empty area
         //       gets scored to 4.0. It does not make sense to attack an empty
         //       area.
-        let score_requirement = (3.2 + AGGRESSIVENESS).clamp(0.0, 3.99);
+        let score_requirement = (3.4 + AGGRESSIVENESS).clamp(0.0, 3.99);
         let pattern_w: u32 = 6;
         let pattern_h: u32 = 6;
         let pattern = [
@@ -610,7 +625,7 @@ impl BrainState {
             let max_rotation_speed = MAX_ROTATION_SPEED * 0.75;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
-                            target_p, max_linear_speed, max_rotation_speed, true);
+                            target_p, max_linear_speed, max_rotation_speed, false);
             if self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON * 0.5 {
                 wanted_linear_speed = -max_linear_speed * 0.2;
             } else if self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON {
@@ -771,17 +786,17 @@ impl BrainState {
     // Returns a value suitable for wanted_rotation_speed
     pub fn steer_towards_absolute_angle(&mut self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
-        let angle_diff = wrap_angle(((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI);
-        /*info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
-                target_angle_rad, self.rot, angle_diff);*/
-        let speed_factor = 0.2 + (angle_diff.abs() / PI * 0.8);
-        if angle_diff < PI || angle_diff > PI {
+        let angle_diff = wrap_angle_plusminus180(target_angle_rad - self.rot);
+        //info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
+        //        target_angle_rad, self.rot, angle_diff);
+        let mut speed_factor = (0.2 + (angle_diff.abs() / PI * 1.6)).clamp(0.0, 1.0);
+        if angle_diff < -PI || angle_diff > PI {
             return self.u_turn_direction * max_rotation_speed;
         } else if angle_diff < 0.0 {
-            self.u_turn_direction = -1.0;
+            self.u_turn_direction = 1.0;
             return speed_factor * max_rotation_speed;
         } else {
-            self.u_turn_direction = 1.0;
+            self.u_turn_direction = -1.0;
             return speed_factor * -max_rotation_speed;
         }
     }
@@ -796,7 +811,7 @@ impl BrainState {
         let target_angle_rad = heading.angle();
         let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
         let speed_factor = if allow_overshoot {
-            (1.0 - angle_diff / PI * 2.0).clamp(0.0, 1.0)
+            (1.0 - angle_diff / PI).clamp(-0.2, 1.0)
         } else {
             ((u.magnitude() / 20.0).clamp(-1.0, 1.0) - angle_diff / PI * 2.0).clamp(-1.0, 1.0)
         };
