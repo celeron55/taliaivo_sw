@@ -35,11 +35,13 @@ const WEAPON_THROTTLE: f32 = 100.0;
 //const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 40.0;
 const AGGRESSIVENESS: f32 = 0.3; // roughly -1.0...1.0, 0.0 = normal aggressiveness
 const MAX_LINEAR_SPEED: f32 = 50.0;
-const MAX_ROTATION_SPEED: f32 = PI * 2.5;
+const MAX_ROTATION_SPEED: f32 = PI * 4.0;
+const ATTACK_LINEAR_SPEED: f32 = 100.0;
+const ATTACK_ROTATION_SPEED: f32 = PI * 4.0;
 const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
 const SCANNING_FREQUENCY: f32 = 5.0;
 const ATTACK_SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
-const ATTACK_SCANNING_FREQUENCY: f32 = 1.0;
+const ATTACK_SCANNING_FREQUENCY: f32 = 10.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
 
@@ -625,7 +627,7 @@ impl BrainState {
             let max_rotation_speed = MAX_ROTATION_SPEED * 0.75;
             let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
-                            target_p, max_linear_speed, max_rotation_speed, false);
+                            target_p, max_linear_speed, max_rotation_speed);
             if self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON * 0.5 {
                 wanted_linear_speed = -max_linear_speed * 0.2;
             } else if self.shortest_wall_head_on_distance < WALL_AVOID_DISTANCE_HEAD_ON {
@@ -738,7 +740,7 @@ impl BrainState {
             // Drive towards that spot
             let (wanted_linear_speed, mut wanted_rotation_speed) =
                         self.drive_towards_absolute_position(
-                            target_p, max_linear_speed, max_rotation_speed, false);
+                            target_p, max_linear_speed, max_rotation_speed);
             // Apply motor speed modulation to get scanning data
             wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
             return (wanted_linear_speed, wanted_rotation_speed);
@@ -760,15 +762,16 @@ impl BrainState {
     pub fn create_attack_motion(&mut self, target_p: Point2<f32>) -> (f32, f32) {
         self.attack_p = Some(target_p);
         // Drive towards target
-        let max_linear_speed = MAX_LINEAR_SPEED;
-        let max_rotation_speed = MAX_ROTATION_SPEED;
+        let max_linear_speed = ATTACK_LINEAR_SPEED;
+        let max_rotation_speed = ATTACK_ROTATION_SPEED;
         let (mut wanted_linear_speed, mut wanted_rotation_speed) =
                     self.drive_towards_absolute_position(
-                        target_p, max_linear_speed, max_rotation_speed, true);
+                        target_p, max_linear_speed, max_rotation_speed);
         // If not much rotation is needed, use extra speed
-        if wanted_rotation_speed.abs() < PI * MAX_ROTATION_SPEED / 2.0 {
+        // TODO: Maybe re-enable this
+        /*if wanted_rotation_speed.abs() < PI * MAX_ROTATION_SPEED / 2.0 {
             wanted_linear_speed *= 1.5 + AGGRESSIVENESS * 0.5;
-        }
+        }*/
         // Apply some motor speed modulation to get scanning data to help stay
         // on target
         // NOTE: We don't want to do a lot of this, because it makes the attack
@@ -787,9 +790,9 @@ impl BrainState {
     pub fn steer_towards_absolute_angle(&mut self, target_angle_rad: f32,
             max_rotation_speed: f32) -> f32 {
         let angle_diff = wrap_angle_plusminus180(target_angle_rad - self.rot);
-        //info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
-        //        target_angle_rad, self.rot, angle_diff);
-        let mut speed_factor = (0.2 + (angle_diff.abs() / PI * 1.6)).clamp(0.0, 1.0);
+        info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
+                target_angle_rad, self.rot, angle_diff);
+        let mut speed_factor = (0.2 + (angle_diff.abs() / PI * 5.0)).clamp(0.0, 1.0);
         if angle_diff < -PI || angle_diff > PI {
             return self.u_turn_direction * max_rotation_speed;
         } else if angle_diff < 0.0 {
@@ -804,21 +807,19 @@ impl BrainState {
     // Returns a value suitable for wanted_linear_speed and wanted_rotation_speed
     // Prioritizes steering first, then picks up speed
     pub fn drive_towards_absolute_position(&mut self, target_p: Point2<f32>,
-            max_linear_speed: f32, max_rotation_speed: f32,
-            allow_overshoot: bool) -> (f32, f32) {
+            max_linear_speed: f32, max_rotation_speed: f32) -> (f32, f32) {
         let u = target_p - self.pos;
         let heading = Rotation2::rotation_between(&Vector2::x(), &u);
         let target_angle_rad = heading.angle();
         let angle_diff = ((target_angle_rad - self.rot + PI) % (PI * 2.0)) - PI;
-        let speed_factor = if allow_overshoot {
-            (1.0 - angle_diff / PI).clamp(-0.2, 1.0)
-        } else {
-            ((u.magnitude() / 20.0).clamp(-1.0, 1.0) - angle_diff / PI * 2.0).clamp(-1.0, 1.0)
-        };
+        let speed_factor =
+            ((u.magnitude() / 20.0).clamp(-1.0, 1.0) - angle_diff / PI * 2.0).clamp(-1.0, 1.0);
         let wanted_linear_speed = max_linear_speed * speed_factor;
         let wanted_rotation_speed = self.steer_towards_absolute_angle(
                 target_angle_rad, max_rotation_speed);
+        //info!("wanted_rotation_speed: {:?}", wanted_rotation_speed);
         return (wanted_linear_speed, wanted_rotation_speed)
+        //return (0.0, wanted_rotation_speed)
     }
 }
 
