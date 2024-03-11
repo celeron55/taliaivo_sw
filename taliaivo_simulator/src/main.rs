@@ -884,7 +884,8 @@ fn main() {
                           g);
 
                 let transform1 = transform.trans(180.0, 10.0);
-                robots[0].draw_map(&c, g, &transform1, 2.2);
+                robots[0].draw_map(&c, g, &transform1,
+                        88.0 / taliaivo_common::map::MAP_W as f64);
                 //let transform2 = transform1.trans(0.0, 100.0);
                 //robots[1].draw_map(&c, g, &transform2, 0.75);
 

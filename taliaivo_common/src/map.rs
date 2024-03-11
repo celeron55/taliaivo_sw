@@ -6,7 +6,7 @@ use nalgebra::{Vector2, Point2};
 use micromath::F32Ext; // f32.sin and f32.cos
 use core::cmp::Ordering;
 
-pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
+pub const MAP_T: f32 = 10.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm
 pub const MAP_H_REAL: f32 = MAP_W_REAL;
 pub const MAP_W: u32 = (MAP_W_REAL / MAP_T) as u32; // Map width in tiles
@@ -259,7 +259,7 @@ const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
-const HOUGH_THRESHOLD: usize = 13;
+const HOUGH_THRESHOLD: usize = 7;
 const KEEP_NUM_TOP_LINES: usize = 7;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const EDGE_MIN_POS: f32 = 50.0;
