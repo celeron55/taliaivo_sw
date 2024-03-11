@@ -33,11 +33,11 @@ const WEAPON_THROTTLE: f32 = 100.0;
 //const SCANNING_FREQUENCY: f32 = 10.0;
 //const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 15.0;
 //const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 40.0;
-const AGGRESSIVENESS: f32 = 0.3; // roughly -1.0...1.0, 0.0 = normal aggressiveness
-const MAX_LINEAR_SPEED: f32 = 50.0;
-const MAX_ROTATION_SPEED: f32 = PI * 4.0;
-const ATTACK_LINEAR_SPEED: f32 = 100.0;
-const ATTACK_ROTATION_SPEED: f32 = PI * 4.0;
+const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
+const MAX_LINEAR_SPEED: f32 = 40.0;
+const MAX_ROTATION_SPEED: f32 = PI * 3.0;
+const ATTACK_LINEAR_SPEED: f32 = 70.0;
+const ATTACK_ROTATION_SPEED: f32 = PI * 3.0;
 const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
 const SCANNING_FREQUENCY: f32 = 5.0;
 const ATTACK_SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
@@ -681,15 +681,13 @@ impl BrainState {
         let max_linear_speed = self.get_wall_safe_linear_speed();
         let max_rotation_speed = MAX_ROTATION_SPEED * 0.5;
         // Find a good spot on the map to investigate
-        let pattern_w: u32 = 6;
-        let pattern_h: u32 = 6;
+        let pattern_w: u32 = 4;
+        let pattern_h: u32 = 4;
         let pattern = [
-            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
-            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
-            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
-            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
-            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
-            -30.0, -30.0, -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0,
+            -30.0, -30.0, -30.0, -30.0,
         ];
         // Filter out positions that are behind or close to walls
         let robot_tile = self.pos.coords * (1.0 / self.map.tile_wh);

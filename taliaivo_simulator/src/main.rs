@@ -28,6 +28,7 @@ const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
 
 const SIMULATE_LIDAR: bool = false;
 const SIMULATE_SWIPING_FRONT_SENSOR: bool = false;
+
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
 const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
 const GYRO_SENSOR_NOISE_MIN: f32 = PI as f32 * -0.1;
@@ -605,7 +606,7 @@ impl Robot {
                     (angle_rad + PI as f32 * 0.5).sin());
             let p1 = line_midpoint + line_direction * 15.0;
             let p2 = line_midpoint - line_direction * 15.0;
-            piston_window::line([0.35, 0.45, 1.0, 1.0], tile_size * 0.2,
+            piston_window::line([0.35, 0.45, 1.0, 1.0], 0.5,
                     [tile_size * p1.x as f64, tile_size * p1.y as f64,
                         tile_size * p2.x as f64, tile_size * p2.y as f64],
                     *transform,
