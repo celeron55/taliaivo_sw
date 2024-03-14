@@ -14,6 +14,14 @@ use log::{info, warn};
 pub use map::*;
 
 pub const UPS: u32 = 50; // Updates per second
+
+pub enum AlgorithmType {
+    Mapper,
+    Simple,
+}
+pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
+//pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Simple;
+
 const ENEMY_HISTORY_LENGTH: usize = 50;
 
 // Arena configuration
@@ -225,6 +233,11 @@ pub struct BrainState {
     gyro_based_rotation_speed_filtered: f32,
     wheel_based_rotation_speed_filtered: f32,
     u_turn_direction: f32,
+    // New algorithm
+    enemy_position: Option<Point2<f32>>,
+    enemy_detect_timestamp: Option<u64>,
+    wall_position: Option<Point2<f32>>,
+    wall_detect_timestamp: Option<u64>,
 }
 
 impl BrainState {
@@ -251,6 +264,10 @@ impl BrainState {
             gyro_based_rotation_speed_filtered: 0.0,
             wheel_based_rotation_speed_filtered: 0.0,
             u_turn_direction: -1.0,
+            enemy_position: None,
+            enemy_detect_timestamp: None,
+            wall_position: None,
+            wall_detect_timestamp: None,
         }
     }
 
@@ -269,8 +286,14 @@ impl BrainState {
             self.map.translate(dx_tiles, dy_tiles);
         }
 
-        // 0.998 works for keeping up to date with a 125x125cm arena at 100 UPS
-        self.map.global_forget(1.0 - 0.004 * (125.0 / ARENA_DIMENSION));
+        match ALGORITHM_TYPE {
+            AlgorithmType::Mapper => {
+                // 0.998 works for keeping up to date with a 125x125cm arena at 100 UPS
+                self.map.global_forget(1.0 - 0.004 * (125.0 / ARENA_DIMENSION));
+            }
+            AlgorithmType::Simple => {
+            }
+        };
 
         let servo_inputs = robot.get_rc_input_values();
         let robot_enabled = servo_inputs[0] > 0.5;
@@ -328,7 +351,7 @@ impl BrainState {
         self.vel.x = avg_wheel_speed * self.rot.cos();
         self.vel.y = avg_wheel_speed * self.rot.sin();
 
-        // TODO: Maintain self.pos via self.vel
+        // Maintain self.pos by integrating self.vel
         self.pos.x += self.vel.x / UPS as f32;
         self.pos.y += self.vel.y / UPS as f32;
 
@@ -336,99 +359,221 @@ impl BrainState {
 
         //info!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
 
-        for reading in &self.proximity_sensor_readings {
-            let maybe_newly_occupied = self.map.paint_proximity_reading(
-                    self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
-            if AGGRESSIVENESS > 0.01 {
-                if let Some(newly_occupied_p) = maybe_newly_occupied {
-                    //info!("Newly occupied: {:?}", newly_occupied_p);
-                    // Filter out point if it is close to a wall
-                    let newly_occupied_p_f = Point2::new(
-                            newly_occupied_p.x as f32,
-                            newly_occupied_p.y as f32);
-                    if !tile_is_close_to_wall(newly_occupied_p_f, &self.wall_lines, 3.0) {
-                        // Detect if the newly occupied point behind us regarding to our
-                        // movement direction. That would mean it is likely the newly
-                        // occupied point was not caused by our movement and instead it
-                        // is the enemy trying to catch up on us. If it is such a point,
-                        // add it to enemy_history.
-                        //let robot_rotation_vector = Vector2::new(self.rot.cos(), self.rot.sin());
-                        let robot_direction_vector = self.vel;
-                        let newly_occupied_p_world = Point2::new(
-                                newly_occupied_p.x as f32 * self.map.tile_wh,
-                                newly_occupied_p.y as f32 * self.map.tile_wh);
-                        let point_direction_vector = newly_occupied_p_world - self.pos;
-                        if robot_direction_vector.dot(&point_direction_vector) < 0.0 ||
-                                AGGRESSIVENESS >= 0.5 {
-                            self.enemy_history.push((self.counter, newly_occupied_p_world));
-                        }
-                        //info!("Isn't close to wall");
+        let (mut wanted_linear_speed, mut wanted_rotation_speed) = match ALGORITHM_TYPE {
+        AlgorithmType::Simple => {
+            if self.proximity_sensor_readings.len() >= 6 {
+                let fwd = self.proximity_sensor_readings[0].1;
+                let l45 = self.proximity_sensor_readings[1].1;
+                let r45 = self.proximity_sensor_readings[2].1;
+                let l90 = self.proximity_sensor_readings[3].1;
+                let r90 = self.proximity_sensor_readings[4].1;
+                let rev = self.proximity_sensor_readings[5].1;
+
+                let fwd_det = fwd < 25.0;
+                let l45_det = l45 < 25.0;
+                let r45_det = r45 < 25.0;
+                let l90_det = l90 < 25.0;
+                let r90_det = r90 < 25.0;
+                let rev_det = rev < 25.0;
+
+                // These checks are ordered from least important to most important.
+                // Succeeding ones override the previous result.
+
+                if rev_det {
+                    let angle_rad = self.rot + PI;
+                    let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+                    let distance = rev;
+                    let enemy_pos = self.pos + direction * distance;
+                    self.enemy_position = Some(enemy_pos);
+                    self.enemy_detect_timestamp = Some(self.counter);
+                    self.wall_position = None;
+                }
+
+                if l90_det {
+                    let wall_normal = self.rot + PI * 0.5;
+                    let wall_distance = l90;
+                    let angle_rad = wall_normal - PI;
+                    let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+                    self.wall_position = Some(self.pos + direction * wall_distance);
+                    self.wall_detect_timestamp = Some(self.counter);
+                }
+
+                if r90_det {
+                    let wall_normal = self.rot - PI * 0.5;
+                    let wall_distance = r90;
+                    let angle_rad = wall_normal - PI;
+                    let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+                    self.wall_position = Some(self.pos + direction * wall_distance);
+                    self.wall_detect_timestamp = Some(self.counter);
+                }
+
+                let fwd_l45_r45_det = fwd_det as usize + l45_det as usize + r45_det as usize;
+                if fwd_l45_r45_det == 1 {
+                    let angle_rad = self.rot + if l45_det {
+                        -PI * 0.25
+                    } else if r45_det {
+                        PI * 0.25
                     } else {
-                        //info!("Is close to wall");
+                        0.0
+                    };
+                    let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+                    let distance = fwd.min(l45).min(r45);
+                    let enemy_pos = self.pos + direction * distance;
+                    self.enemy_position = Some(enemy_pos);
+                    self.enemy_detect_timestamp = Some(self.counter);
+                    self.wall_position = None;
+                } else if fwd_l45_r45_det == 2 {
+                    let mut wall_normal = self.rot + PI;
+                    if !l45_det {
+                        wall_normal += PI * 0.125;
+                    }
+                    if !r45_det {
+                        wall_normal -= PI * 0.125;
+                    }
+                    let wall_distance = fwd.min(l45).min(r45);
+                    let angle_rad = wall_normal - PI;
+                    let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+                    self.wall_position = Some(self.pos + direction * wall_distance);
+                    self.wall_detect_timestamp = Some(self.counter);
+                } else if fwd_l45_r45_det == 3 {
+                    let wall_normal = self.rot + PI;
+                    let wall_distance = fwd.min(l45).min(r45);
+                    let angle_rad = wall_normal - PI;
+                    let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+                    self.wall_position = Some(self.pos + direction * wall_distance);
+                    self.wall_detect_timestamp = Some(self.counter);
+                }
+            }
+
+            if let Some(enemy_detect_timestamp) = self.enemy_detect_timestamp {
+                if self.counter - enemy_detect_timestamp > (UPS as f32 * 0.5) as u64 {
+                    self.enemy_position = None;
+                }
+            }
+
+            if let Some(wall_detect_timestamp) = self.wall_detect_timestamp {
+                if self.counter - wall_detect_timestamp > (UPS as f32 * 0.5) as u64 {
+                    self.wall_position = None;
+                }
+            }
+
+            robot.report_map(&self.map, self.pos, self.rot, self.enemy_position, None,
+                    self.wall_position, &self.wall_lines);
+
+            if let Some(enemy_pos) = self.enemy_position {
+                self.drive_towards_absolute_position(enemy_pos,
+                        ATTACK_LINEAR_SPEED, ATTACK_ROTATION_SPEED)
+            } else if let Some(wall_position) = self.wall_position {
+                // Choose a better direction and steer towards it
+                // Calculate the angular direction the wall is at
+                let direction: Vector2<f32> = wall_position - self.pos;
+                let angle_towards_wall = direction.y.atan2(direction.x);
+                // Steer towards the exact opposite angular direction
+                let drive_angle = angle_towards_wall + PI;
+                (0.0, self.steer_towards_absolute_angle(drive_angle, SCANNING_ROTATION_SPEED))
+            } else {
+                // Drive in circles
+                //(MAX_LINEAR_SPEED, SCANNING_ROTATION_SPEED)
+                // Drive in a straight line
+                (MAX_LINEAR_SPEED, 0.0)
+            }
+        }
+        AlgorithmType::Mapper => {
+            for reading in &self.proximity_sensor_readings {
+                let maybe_newly_occupied = self.map.paint_proximity_reading(
+                        self.pos, reading.0 + self.rot, reading.1, reading.2, -40.0);
+                if AGGRESSIVENESS > 0.01 {
+                    if let Some(newly_occupied_p) = maybe_newly_occupied {
+                        //info!("Newly occupied: {:?}", newly_occupied_p);
+                        // Filter out point if it is close to a wall
+                        let newly_occupied_p_f = Point2::new(
+                                newly_occupied_p.x as f32,
+                                newly_occupied_p.y as f32);
+                        if !tile_is_close_to_wall(newly_occupied_p_f, &self.wall_lines, 3.0) {
+                            // Detect if the newly occupied point behind us regarding to our
+                            // movement direction. That would mean it is likely the newly
+                            // occupied point was not caused by our movement and instead it
+                            // is the enemy trying to catch up on us. If it is such a point,
+                            // add it to enemy_history.
+                            //let robot_rotation_vector = Vector2::new(self.rot.cos(), self.rot.sin());
+                            let robot_direction_vector = self.vel;
+                            let newly_occupied_p_world = Point2::new(
+                                    newly_occupied_p.x as f32 * self.map.tile_wh,
+                                    newly_occupied_p.y as f32 * self.map.tile_wh);
+                            let point_direction_vector = newly_occupied_p_world - self.pos;
+                            if robot_direction_vector.dot(&point_direction_vector) < 0.0 ||
+                                    AGGRESSIVENESS >= 0.5 {
+                                self.enemy_history.push((self.counter, newly_occupied_p_world));
+                            }
+                            //info!("Isn't close to wall");
+                        } else {
+                            //info!("Is close to wall");
+                        }
                     }
                 }
             }
-        }
 
-        self.wall_lines = self.map.hough_transform();
-        /*for line in &self.wall_lines {
-            info!("HoughLine: angle={:?} distance={:?} votes={:?}",
-                    line.angle, line.distance, line.votes);
-        }*/
+            self.wall_lines = self.map.hough_transform();
+            /*for line in &self.wall_lines {
+                info!("HoughLine: angle={:?} distance={:?} votes={:?}",
+                        line.angle, line.distance, line.votes);
+            }*/
 
-        // Guess opposing wall positions and add them also
-        let arena_dimension_tiles = ARENA_DIMENSION / self.map.tile_wh;
-        let mut new_wall_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
-        for line in &self.wall_lines {
-            let line2 = line.move_towards_point(robot_tile_position, arena_dimension_tiles);
-            new_wall_lines.push(line2);
-        }
-        self.wall_lines.extend(new_wall_lines);
+            // Guess opposing wall positions and add them also
+            let arena_dimension_tiles = ARENA_DIMENSION / self.map.tile_wh;
+            let mut new_wall_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
+            for line in &self.wall_lines {
+                let line2 = line.move_towards_point(robot_tile_position, arena_dimension_tiles);
+                new_wall_lines.push(line2);
+            }
+            self.wall_lines.extend(new_wall_lines);
 
-        robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
-                self.wall_avoid_p, &self.wall_lines);
+            robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
+                    self.wall_avoid_p, &self.wall_lines);
 
-        // Process wall lines
+            // Process wall lines
 
-        self.shortest_wall_head_on_distance = f32::MAX;
-        for line in &self.wall_lines {
-            if let Some(intersection_point_tiles) = calculate_intersection(
-                    robot_tile_position, robot_direction_vector, &line) {
-                let distance_tiles = (robot_tile_position - intersection_point_tiles).magnitude();
-                /*info!("On trajectory to hit: p(tiles)={:?}, distance(tiles)={:?}",
-                        intersection_point_tiles, distance_tiles);*/
-                let distance = distance_tiles * self.map.tile_wh;
-                let _intersection_point = intersection_point_tiles * self.map.tile_wh;
-                if distance < self.shortest_wall_head_on_distance {
-                    self.shortest_wall_head_on_distance = distance;
+            self.shortest_wall_head_on_distance = f32::MAX;
+            for line in &self.wall_lines {
+                if let Some(intersection_point_tiles) = calculate_intersection(
+                        robot_tile_position, robot_direction_vector, &line) {
+                    let distance_tiles = (robot_tile_position - intersection_point_tiles).magnitude();
+                    /*info!("On trajectory to hit: p(tiles)={:?}, distance(tiles)={:?}",
+                            intersection_point_tiles, distance_tiles);*/
+                    let distance = distance_tiles * self.map.tile_wh;
+                    let _intersection_point = intersection_point_tiles * self.map.tile_wh;
+                    if distance < self.shortest_wall_head_on_distance {
+                        self.shortest_wall_head_on_distance = distance;
+                    }
                 }
             }
-        }
-        /*if self.shortest_wall_head_on_distance < f32::MAX {
-            info!("Shortest distance to head-on wall collision: {:?}",
-                    self.shortest_wall_head_on_distance);
-        }*/
+            /*if self.shortest_wall_head_on_distance < f32::MAX {
+                info!("Shortest distance to head-on wall collision: {:?}",
+                        self.shortest_wall_head_on_distance);
+            }*/
 
-        const IMPORTANCE_CONSTANT: f32 = 15.0;
-        self.wall_avoidance_vector = Vector2::new(0.0, 0.0);
-        self.shortest_wall_distance = f32::MAX;
-        for line in &self.wall_lines {
-            let vector_from_wall_to_robot = line.vector_to_point(robot_tile_position);
-            let distance_from_line_tiles = vector_from_wall_to_robot.magnitude();
-            let importance = 1.0 / (distance_from_line_tiles +
-                    IMPORTANCE_CONSTANT / self.map.tile_wh);
-            self.wall_avoidance_vector += vector_from_wall_to_robot.normalize() * importance;
-            let distance = distance_from_line_tiles * self.map.tile_wh;
-            if distance < self.shortest_wall_distance {
-                self.shortest_wall_distance = distance;
+            const IMPORTANCE_CONSTANT: f32 = 15.0;
+            self.wall_avoidance_vector = Vector2::new(0.0, 0.0);
+            self.shortest_wall_distance = f32::MAX;
+            for line in &self.wall_lines {
+                let vector_from_wall_to_robot = line.vector_to_point(robot_tile_position);
+                let distance_from_line_tiles = vector_from_wall_to_robot.magnitude();
+                let importance = 1.0 / (distance_from_line_tiles +
+                        IMPORTANCE_CONSTANT / self.map.tile_wh);
+                self.wall_avoidance_vector += vector_from_wall_to_robot.normalize() * importance;
+                let distance = distance_from_line_tiles * self.map.tile_wh;
+                if distance < self.shortest_wall_distance {
+                    self.shortest_wall_distance = distance;
+                }
             }
-        }
-        /*if self.wall_avoidance_vector.magnitude() > 0.0 {
-            info!("Walls (shortest distance: {:?}) would be best avoided by moving towards: {:?}",
-                    self.shortest_wall_distance, self.wall_avoidance_vector);
-        }*/
+            /*if self.wall_avoidance_vector.magnitude() > 0.0 {
+                info!("Walls (shortest distance: {:?}) would be best avoided by moving towards: {:?}",
+                        self.shortest_wall_distance, self.wall_avoidance_vector);
+            }*/
 
-        let (mut wanted_linear_speed, mut wanted_rotation_speed) = self.create_motion();
+            self.create_motion()
+        }
+        };
 
         // Limit wanted speeds if out of control situation is detected
         // TODO: Try to do traction control, i.e. keep wheel speeds not too far

@@ -537,21 +537,32 @@ impl Robot {
 
     fn draw_map(&self, _c: &Context, g: &mut G2d, transform: &[[f64; 3]; 2], tile_size: f64) {
         let map = &self.diagnostic_map;
-        for y in 0..map.height {
-            for x in 0..map.width {
-                let idx = (y * map.width + x) as usize;
-                let tile = map.data[idx];
-                rectangle([
-                        (tile + 100.0) / 200.0,
-                        (tile + 100.0) / 200.0,
-                        (tile + 100.0) / 200.0,
-                        1.0
-                    ], 
-                    [tile_size * x as f64, tile_size * y as f64, tile_size, tile_size],
-                    *transform,
-                    g);
+
+        match taliaivo_common::ALGORITHM_TYPE {
+            taliaivo_common::AlgorithmType::Mapper => {
+                for y in 0..map.height {
+                    for x in 0..map.width {
+                        let idx = (y * map.width + x) as usize;
+                        let tile = map.data[idx];
+                        rectangle([
+                                (tile + 100.0) / 200.0,
+                                (tile + 100.0) / 200.0,
+                                (tile + 100.0) / 200.0,
+                                1.0
+                            ],
+                            [tile_size * x as f64, tile_size * y as f64, tile_size, tile_size],
+                            *transform,
+                            g);
+                    }
+                }
             }
-        }
+            taliaivo_common::AlgorithmType::Simple => {
+                /*rectangle([0.0, 0.0, 0.0, 1.0],
+                    [0.0, 0.0, tile_size * map.width as f64, tile_size * map.height as f64],
+                    *transform,
+                    g);*/
+            }
+        };
 
         let p = self.diagnostic_robot_p;
         let r = self.diagnostic_robot_r;
@@ -566,6 +577,22 @@ impl Robot {
                             tile_size * p.y as f64 / map.tile_wh as f64)
                     .rot_rad(r as f64),
                 g);
+
+        // Draw proximity_sensor_readings, each as a dot representing the
+        // detected point
+        // (angle_rad: f32, distance: f32, detected: bool));
+        for (angle_rad, distance, detected) in &self.proximity_sensor_readings {
+            let angle_rad = angle_rad + r;
+            let starting_position = self.diagnostic_robot_p;
+            let direction: Vector2<f32> = Vector2::new(angle_rad.cos(), angle_rad.sin());
+            let detect_p = starting_position + direction * *distance;
+            rectangle([0.8, 0.8, 0.2, 1.0],
+                    [-tile_size*0.33, -tile_size*0.33, tile_size*0.66, tile_size*0.66],
+                    transform
+                        .trans(tile_size * detect_p.x as f64 / map.tile_wh as f64,
+                                tile_size * detect_p.y as f64 / map.tile_wh as f64),
+                    g);
+        }
 
         if let Some(p) = self.diagnostic_attack_p {
             rectangle([0.8, 0.2, 0.2, 1.0],
