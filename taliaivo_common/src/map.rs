@@ -265,8 +265,8 @@ pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
 const EDGE_MIN_POS: f32 = 50.0;
 const EDGE_MAX_NEG: f32 = -15.0;
 
-const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
-const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
+//const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
+//const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
 
 type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
 
@@ -316,7 +316,8 @@ impl HoughLine {
         let line_normal = Vector2::new(angle_rad.cos(), angle_rad.sin());
 
         // Calculate the current perpendicular distance from the target point to the line
-        let current_distance = (target_point.dot(&line_normal) - self.distance).abs();
+        // TODO: Why isn't this used at all?
+        //let current_distance = (target_point.dot(&line_normal) - self.distance).abs();
 
         // Calculate the new distance for the line after moving
         let new_distance = if self.distance < target_point.dot(&line_normal) {
@@ -479,7 +480,7 @@ impl Map {
                     let distance = distance_index as f32 * DISTANCE_STEP as f32 +
                             DISTANCE_STEP as f32 / 2.0;
                     // TODO: Maybe care about the result of the try_push
-                    line_candidates.try_push(HoughLine::new(angle, distance, votes.into()));
+                    let _ = line_candidates.try_push(HoughLine::new(angle, distance, votes.into()));
                 }
             }
         }
@@ -499,7 +500,7 @@ impl Map {
     }
 
     // TODO: Fix this?
-    fn merge_similar_lines(&self, lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>)
+    /*fn merge_similar_lines(&self, lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES>)
             -> ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> {
         let mut merged_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
         let mut used: ArrayVec<bool, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
@@ -565,7 +566,7 @@ impl Map {
         }
 
         merged_lines
-    }
+    }*/
 
 }
 

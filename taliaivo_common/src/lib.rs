@@ -9,7 +9,8 @@ use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
 use micromath::F32Ext; // f32.sin and f32.cos
-use log::{Record, Metadata, Log, info, warn};
+#[allow(unused_imports)]
+use log::{info, warn};
 pub use map::*;
 
 pub const UPS: u32 = 50; // Updates per second
@@ -87,7 +88,7 @@ pub trait BrainInterface {
 
     // Allows replaying movement from log files and seeing what the map looks
     // like
-    fn force_wheel_speeds(&mut self, left_speed_cm_s: f32, right_speed_cm_s: f32) {}
+    fn force_wheel_speeds(&mut self, _left_speed_cm_s: f32, _right_speed_cm_s: f32) {}
 }
 
 fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
@@ -104,7 +105,7 @@ fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -
     }
 }
 
-fn average_enemy_position_over_recent_ticks(
+/*fn average_enemy_position_over_recent_ticks(
         buffer: &ConstGenericRingBuffer<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
         current_tick: u64, max_age: u64) -> Option<Point2<f32>> {
     let min_tick = current_tick - max_age;
@@ -123,7 +124,7 @@ fn average_enemy_position_over_recent_ticks(
     } else {
         None // No data for the specified range
     }
-}
+}*/
 
 fn average_enemy_position_and_velocity_over_recent_ticks(
     buffer: &ConstGenericRingBuffer<(u64, Point2<f32>), ENEMY_HISTORY_LENGTH>,
@@ -176,7 +177,7 @@ fn tile_is_close_to_wall(p: Point2<f32>,
     return false;
 }
 
-fn wrap_angle_plusminus360(mut a: f32) -> f32 {
+/*fn wrap_angle_plusminus360(mut a: f32) -> f32 {
     // TODO: Better wrapping
     // TODO: Maybe something like this?
     //((a + PI) % (PI * 2.0)) - PI
@@ -187,7 +188,7 @@ fn wrap_angle_plusminus360(mut a: f32) -> f32 {
         a -= PI * 4.0
     }
     return a
-}
+}*/
 
 fn wrap_angle_plusminus180(mut a: f32) -> f32 {
     // TODO: Better wrapping
@@ -427,10 +428,7 @@ impl BrainState {
                     self.shortest_wall_distance, self.wall_avoidance_vector);
         }*/
 
-        let mut wanted_linear_speed = 0.0;
-        let mut wanted_rotation_speed = 0.0;
-
-        (wanted_linear_speed, wanted_rotation_speed) = self.create_motion();
+        let (mut wanted_linear_speed, mut wanted_rotation_speed) = self.create_motion();
 
         // Limit wanted speeds if out of control situation is detected
         // TODO: Try to do traction control, i.e. keep wheel speeds not too far
@@ -504,8 +502,8 @@ impl BrainState {
             // Assume the first 3 sensors are pointing somewhat forward and if they
             // all are showing short distance, don't try to push further
             let mut safe_linear_speed = MAX_LINEAR_SPEED;
-            let L = WALL_AVOID_DISTANCE_ANY_DIRECTION;
-            let L2 = WALL_AVOID_DISTANCE_ANY_DIRECTION * 0.75;
+            const L: f32 = WALL_AVOID_DISTANCE_ANY_DIRECTION;
+            const L2: f32 = WALL_AVOID_DISTANCE_ANY_DIRECTION * 0.75;
             if d0 < L {
                 safe_linear_speed *= 0.5;
             }
@@ -790,7 +788,7 @@ impl BrainState {
         let angle_diff = wrap_angle_plusminus180(target_angle_rad - self.rot);
         //info!("target_angle_rad: {:?}, self.rot: {:?}, angle_diff: {:?}",
         //        target_angle_rad, self.rot, angle_diff);
-        let mut speed_factor = (0.2 + (angle_diff.abs() / PI * 5.0)).clamp(0.0, 1.0);
+        let speed_factor = (0.2 + (angle_diff.abs() / PI * 5.0)).clamp(0.0, 1.0);
         if angle_diff < -PI || angle_diff > PI {
             return self.u_turn_direction * max_rotation_speed;
         } else if angle_diff < 0.0 {

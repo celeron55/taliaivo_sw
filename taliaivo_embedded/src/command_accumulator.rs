@@ -1,8 +1,4 @@
-#![no_std]
-
-extern crate arrayvec;
-
-use arrayvec::{ArrayVec, ArrayString};
+use arrayvec::ArrayString;
 
 pub struct CommandAccumulator<const BUF_LEN: usize> {
     buf: ArrayString<BUF_LEN>,

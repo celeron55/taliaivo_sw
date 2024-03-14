@@ -5,39 +5,45 @@
 //#![deny(unsafe_code)]
 //#![allow(clippy::empty_loop)]
 
-use cortex_m;
-use cortex_m::interrupt::{Mutex, CriticalSection};
+use cortex_m::{
+    self,
+    interrupt::Mutex,
+};
 //use cortex_m_rt::{entry, exception};
 use stm32f4xx_hal as hal;
 use stm32f4xx_hal::{
-    gpio::{Output, PushPull, PA8},
     gpio,
+    gpio::{Output, PushPull},
     prelude::*,
-    serial::{config::Config, Event, Serial},
-    pac as pac,
+    serial::{config::Config, Serial},
+    pac,
     otg_fs,
     adc::{
         config::{AdcConfig, Clock, Resolution, SampleTime},
         Adc,
     },
-    dma::{config::DmaConfig, PeripheralToMemory, Stream0, StreamsTuple, Transfer},
-    pac::{ADC1, TIM2, USART2},
+    //dma::{config::DmaConfig, PeripheralToMemory, Stream0, StreamsTuple, Transfer},
     timer::{Timer, pwm_input::PwmInput},
 };
 use rtic::app;
-use rtic_monotonics::systick::*;
+use rtic_monotonics::{
+    Monotonic,
+    systick::*,
+};
 use usb_device::{prelude::*};
 use usbd_serial::USB_CLASS_CDC;
 use usbd_serial;
-use mpu6050::{Mpu6050, Mpu6050Error};
+use mpu6050::Mpu6050;
 
 use arrayvec::{ArrayVec, ArrayString};
+#[allow(unused_imports)]
 use nalgebra::{Vector2, Point2, Rotation2, Vector3};
 use core::cell::RefCell;
 use core::ops::DerefMut;
 use core::fmt::Write; // For ArrayString
-//use log;
-use log::{Record, Metadata, Log, info, warn};
+use log::{Record, Metadata, Log};
+#[allow(unused_imports)]
+use log::{info, warn};
 use ringbuffer::{RingBuffer, ConstGenericRingBuffer};
 use core::f64::consts::PI;
 //use core::borrow::BorrowMut;
@@ -285,8 +291,6 @@ mod app {
 
     #[shared]
     struct Shared {
-        millis_counter: u64,
-        wanted_led_state: bool,
         console_rxbuf: ConstGenericRingBuffer<u8, 1024>,
         usb_dev: UsbDevice<'static, otg_fs::UsbBusType>,
         usb_serial: usbd_serial::SerialPort<'static, otg_fs::UsbBusType>,
@@ -295,11 +299,12 @@ mod app {
         vbat_lowpass: f32,
         log_sensors: bool,
         servo_in1: PwmInput<pac::TIM9>,
+        debug_pin: gpio::PE4<Output<PushPull>>,
     }
 
     #[local]
     struct Local {
-        led_pin: PA8<Output<PushPull>>,
+        led_pin: gpio::PA8<Output<PushPull>>,
         usart1_rx: stm32f4xx_hal::serial::Rx<stm32f4xx_hal::pac::USART1, u8>,
         usart1_tx: stm32f4xx_hal::serial::Tx<stm32f4xx_hal::pac::USART1, u8>,
         usart1_txbuf: ConstGenericRingBuffer<u8, 1024>,
@@ -308,7 +313,7 @@ mod app {
         mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
         servo_in1_last_period: u16,
         servo_in1_timeout_counter: u32,
-        adc: Adc<ADC1>,
+        adc: Adc<pac::ADC1>,
         adc1_c0: gpio::Pin<'A', 0, gpio::Analog>,
         adc1_c1: gpio::Pin<'A', 1, gpio::Analog>,
         adc1_c2: gpio::Pin<'A', 2, gpio::Analog>,
@@ -349,6 +354,9 @@ mod app {
         led_pin.set_high();
 
         //let mut debug_pin = gpiob.pb10.into_push_pull_output();
+
+        // This is the SPI_RESET pin
+        let debug_pin = gpioe.pe4.into_push_pull_output();
 
         // Motor control
 
@@ -402,7 +410,7 @@ mod app {
         // - Flipping forward: (0, -1, 0)
         // - Flipping backward: (0, 1, 0)
 
-        let mut mpu_i2c = hal::i2c::I2c::new(
+        let mpu_i2c = hal::i2c::I2c::new(
             cx.device.I2C1,
             (gpiob.pb6, gpiob.pb7),
             hal::i2c::Mode::Standard { frequency: 400.kHz() },
@@ -410,20 +418,20 @@ mod app {
         );
         //let mut mpu = Mpu6050::new(mpu_i2c);
         let mut mpu = Mpu6050::new_with_addr(mpu_i2c, 0x69); // AD0 looks to be high
-        let mut syst = {
+        let syst = {
             let mut delay = cortex_m::delay::Delay::new(cx.core.SYST, 168_000_000);
 
             // MPU6050 takes some time to boot after applying power
             // When tested, 0ms isn't enough, but 10ms was enough
             delay.delay_ms(20);
 
-            mpu.init(&mut delay);
+            let _ = mpu.init(&mut delay);
 
             delay.free() // Return SYST peripheral for other uses
         };
-        mpu.set_clock_source(mpu6050::device::CLKSEL::GZAXIS);
-        mpu.set_accel_range(mpu6050::device::AccelRange::G16);
-        mpu.set_gyro_range(mpu6050::device::GyroRange::D2000);
+        let _ = mpu.set_clock_source(mpu6050::device::CLKSEL::GZAXIS);
+        let _ = mpu.set_accel_range(mpu6050::device::AccelRange::G16);
+        let _ = mpu.set_gyro_range(mpu6050::device::GyroRange::D2000);
 
         // SysTick
 
@@ -443,14 +451,14 @@ mod app {
 
         // UART1
 
-        let mut serial_usart1: Serial<stm32f4xx_hal::pac::USART1, u8> = Serial::new(
+        let serial_usart1: Serial<stm32f4xx_hal::pac::USART1, u8> = Serial::new(
             cx.device.USART1,
             (gpioa.pa9.into_alternate::<7>(), gpioa.pa10.into_alternate::<7>()),
             Config::default().baudrate(115_200.bps()),
             &clocks
         ).unwrap();
-        serial_usart1.listen(Event::RxNotEmpty | Event::TxEmpty);
-        let (usart1_tx, usart1_rx) = serial_usart1.split();
+        let (usart1_tx, mut usart1_rx) = serial_usart1.split();
+        usart1_rx.listen();
 
         // USB
 
@@ -467,7 +475,7 @@ mod app {
         let usb_serial = usbd_serial::SerialPort::new(unsafe { USB_BUS.as_ref().unwrap() });
 
         // Use https://pid.codes/1209/0001/
-        let mut usb_dev = UsbDeviceBuilder::new(
+        let usb_dev = UsbDeviceBuilder::new(
                 unsafe { USB_BUS.as_ref().unwrap() },
                 UsbVidPid(0x1209, 0x0001))
             .device_class(USB_CLASS_CDC)
@@ -506,7 +514,6 @@ mod app {
         // Schedule tasks
 
         algorithm_task::spawn().ok();
-        millis_counter_task::spawn().ok();
         led_task::spawn().ok();
         adc_task::spawn().ok();
         console_command_task::spawn().ok();
@@ -515,8 +522,6 @@ mod app {
 
         (
             Shared {
-                millis_counter: 0,
-                wanted_led_state: true,
                 console_rxbuf: ConstGenericRingBuffer::new(),
                 usb_dev: usb_dev,
                 usb_serial: usb_serial,
@@ -525,6 +530,7 @@ mod app {
                 vbat_lowpass: 0.0,
                 log_sensors: false,
                 servo_in1: servo_in1,
+                debug_pin: debug_pin,
             },
             Local {
                 led_pin: led_pin,
@@ -548,17 +554,23 @@ mod app {
         )
     }
 
-    #[idle(shared = [], local = [])]
+    #[idle(
+        shared = [
+            debug_pin,
+        ],
+        local = []
+    )]
     fn idle(mut cx: idle::Context) -> ! {
         loop {
-            cortex_m::asm::nop();
+            for _ in 0..20000 {
+                cortex_m::asm::nop();
+            }
+            cx.shared.debug_pin.lock(|pin| { pin.toggle(); });
         }
     }
 
     #[task(priority = 1,
         shared = [
-            millis_counter,
-            wanted_led_state,
             adc_result,
             drive_mode,
             vbat_lowpass,
@@ -602,7 +614,7 @@ mod app {
         let interval_ms = 1000 / taliaivo_common::UPS as u64;
         //let interval_ms = 1000;
         loop {
-            let t0 = cx.shared.millis_counter.lock(|value|{ *value });
+            let t0 = Systick::now().duration_since_epoch().to_millis();
 
             // Servo inputs
 
@@ -745,11 +757,8 @@ mod app {
                 set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
             }
 
-            // Toggle LED for debugging
-            //cx.shared.wanted_led_state.lock(|value| { *value = !*value; });
-
             // Enforce minimum interval
-            let t1 = cx.shared.millis_counter.lock(|value|{ *value });
+            let t1 = Systick::now().duration_since_epoch().to_millis();
             let additional_delay = t0 as i64 + interval_ms as i64 - t1 as i64;
             if additional_delay > 0 {
                 Systick::delay((additional_delay as u32).millis()).await;
@@ -757,23 +766,8 @@ mod app {
         }
     }
 
-    #[task(priority = 2, shared = [millis_counter], local = [])]
-    async fn millis_counter_task(mut cx: millis_counter_task::Context) {
-        loop {
-            // NOTE: When incrementing by 1, the counter runs at roughly 50%
-            //       speed compared to realtime
-            // NOTE: When incrementing by 5, the counter runs at roughly 95%
-            //       speed compared to realtime
-            cx.shared.millis_counter.lock(|value| {
-                *value = *value + 5;
-            });
-            Systick::delay(5.millis()).await;
-        }
-    }
-
     #[task(priority = 2,
         shared = [
-            wanted_led_state,
             vbat_lowpass,
             drive_mode
         ],
@@ -785,35 +779,34 @@ mod app {
             let drive_mode = cx.shared.drive_mode.lock(|v| { *v });
             if drive_mode == DriveMode::Normal {
                 if vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
-                    cx.local.led_pin.set_state(true.into());
+                    cx.local.led_pin.set_high();
                     Systick::delay(100.millis()).await;
-                    cx.local.led_pin.set_state(false.into());
+                    cx.local.led_pin.set_low();
                     Systick::delay(100.millis()).await;
                 } else {
-                    cx.local.led_pin.set_state(true.into());
+                    cx.local.led_pin.set_high();
                     Systick::delay(1000.millis()).await;
-                    cx.local.led_pin.set_state(false.into());
+                    cx.local.led_pin.set_low();
                     Systick::delay(1000.millis()).await;
                 }
             } else if drive_mode == DriveMode::Stop {
-                cx.local.led_pin.set_state(true.into());
+                cx.local.led_pin.set_high();
                 Systick::delay(100.millis()).await;
-                cx.local.led_pin.set_state(false.into());
+                cx.local.led_pin.set_low();
                 Systick::delay(900.millis()).await;
             } else if drive_mode == DriveMode::MotorTest {
-                cx.local.led_pin.set_state(true.into());
+                cx.local.led_pin.set_high();
                 Systick::delay(100.millis()).await;
-                cx.local.led_pin.set_state(false.into());
+                cx.local.led_pin.set_low();
                 Systick::delay(100.millis()).await;
-                cx.local.led_pin.set_state(true.into());
+                cx.local.led_pin.set_high();
                 Systick::delay(100.millis()).await;
-                cx.local.led_pin.set_state(false.into());
+                cx.local.led_pin.set_low();
                 Systick::delay(700.millis()).await;
             } else {
-                let wanted_state = cx.shared.wanted_led_state.lock(|value| { *value });
-                cx.local.led_pin.set_state(wanted_state.into());
+                cx.local.led_pin.set_high();
+                Systick::delay(100.millis()).await;
             }
-            Systick::delay(1.millis()).await;
         }
     }
 
@@ -853,7 +846,7 @@ mod app {
                 *shared_result = result.clone();
             });
 
-            Systick::delay(20.millis()).await;
+            Systick::delay(15.millis()).await;
         }
     }
 
@@ -861,7 +854,6 @@ mod app {
         priority = 1,
         shared = [
             console_rxbuf,
-            wanted_led_state,
             drive_mode,
             vbat_lowpass,
             log_sensors,
@@ -905,10 +897,6 @@ mod app {
                         info!("  log");
                         info!("  bat");
                     }
-                    // Flash LED for debugging
-                    cx.shared.wanted_led_state.lock(|value| { *value = false; });
-                    Systick::delay(50.millis()).await;
-                    cx.shared.wanted_led_state.lock(|value| { *value = true; });
                 }
             }
         }
@@ -916,7 +904,7 @@ mod app {
 
     #[task(
         binds = USART1,
-        shared = [wanted_led_state, console_rxbuf],
+        shared = [console_rxbuf],
         local = [usart1_rx, usart1_tx, usart1_txbuf])
     ]
     fn usart1(mut cx: usart1::Context) {
@@ -933,14 +921,26 @@ mod app {
             // NOTE: This assumes there are only single-byte characters in the
             // buffer. Otherwise it won't fully fit in our byte-based txbuf
             let logger_txbuf_option = MULTI_LOGGER.get_uart_buffer();
-            if let Some(mut logger_txbuf) = logger_txbuf_option {
+            if let Some(logger_txbuf) = logger_txbuf_option {
                 for b in logger_txbuf.bytes() {
                     cx.local.usart1_txbuf.push(b);
                 }
             }
+            if cx.local.usart1_txbuf.is_empty() {
+                cx.local.usart1_tx.unlisten();
+            }
         }
-        if let Some(b) = cx.local.usart1_txbuf.dequeue() {
-            cx.local.usart1_tx.write(b);
+        if let Some(b) = cx.local.usart1_txbuf.front() {
+            match cx.local.usart1_tx.write(*b) {
+                Ok(_) => {
+                    cx.local.usart1_txbuf.dequeue();
+                },
+                Err(_) => {
+                },
+            }
+        }
+        if !cx.local.usart1_txbuf.is_empty() {
+            cx.local.usart1_tx.listen();
         }
     }
 
@@ -949,34 +949,50 @@ mod app {
         shared = [
             usb_dev,
             usb_serial,
-            wanted_led_state,
             console_rxbuf
         ],
-        local = []
+        local = [
+            usb_serial_txbuf: ConstGenericRingBuffer<u8, 1024> = ConstGenericRingBuffer::new(),
+        ],
     )]
-    fn otg_fs_int(mut cx: otg_fs_int::Context) {
+    fn otg_fs_int(cx: otg_fs_int::Context) {
         let otg_fs_int::SharedResources {
             __rtic_internal_marker,
             mut usb_dev,
             mut usb_serial,
-            mut wanted_led_state,
             mut console_rxbuf,
         } = cx.shared;
 
-        // TODO: Maybe locking console_rxbuf here with usb_dev and usb_serial
-        // isn't a good idea
+        // Fill up usb_serial_txbuf
+        if cx.local.usb_serial_txbuf.is_empty() {
+            // NOTE: This assumes there are only single-byte characters in the
+            // buffer. Otherwise it won't fully fit in our byte-based usb_serial_txbuf
+            let logger_usb_serial_txbuf_option = MULTI_LOGGER.get_usb_buffer();
+            if let Some(logger_usb_serial_txbuf) = logger_usb_serial_txbuf_option {
+                for b in logger_usb_serial_txbuf.bytes() {
+                    cx.local.usb_serial_txbuf.push(b);
+                }
+            }
+        }
+
+        // Write
+        (&mut usb_serial).lock(|usb_serial| {
+            if let Some(b) = cx.local.usb_serial_txbuf.front() {
+                let buf: [u8; 1] = [*b];
+                match usb_serial.write(&buf) {
+                    Ok(n_written) => {
+                        for _ in 0..n_written {
+                            cx.local.usb_serial_txbuf.dequeue();
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        });
+
+        // Read
         (&mut usb_dev, &mut usb_serial, &mut console_rxbuf).lock(
                 |usb_dev, usb_serial, console_rxbuf| {
-            // Write
-            let logger_txbuf_option = MULTI_LOGGER.get_usb_buffer();
-            if let Some(mut logger_txbuf) = logger_txbuf_option {
-                // Convert from string to bytes
-                let buf = logger_txbuf.as_bytes();
-                // Just throw the buffer to the peripheral and leave. It'll send
-                // what it can. We don't care how it went.
-                let _ = usb_serial.write(&buf);
-            }
-            // Read
             if usb_dev.poll(&mut [usb_serial]) {
                 let mut buf = [0u8; 64];
                 match usb_serial.read(&mut buf) {

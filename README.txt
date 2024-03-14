@@ -103,3 +103,10 @@ Editing
 - Install bacon and run it in another terminal
 $ cargo install --locked bacon
 $ bacon
+
+Logging
+-------
+$ picocom --baud 115200 -r -l -c -e x /dev/ttyACM0 | ts %H:%M:%.S
+$ picocom --baud 115200 -r -l -c -e x /dev/ttyACM0 | tee $(date +%Y-%m-%d_%H%M%S).log
+$ picocom --baud 115200 -r -l -c -e x /dev/ttyUSB0 | ts %H:%M:%.S
+$ picocom --baud 115200 -r -l -c -e x /dev/ttyUSB0 | tee $(date +%Y-%m-%d_%H%M%S).log
