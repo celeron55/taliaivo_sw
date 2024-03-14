@@ -883,7 +883,7 @@ fn main() {
     } else {
         RobotController::Brain
     };
-    let mut secondary_robot_controller = if ENABLE_ROBOT_BRAIN[1] {
+    let mut secondary_robot_controller = if cli.enable_secondary_robot_brain {
         RobotController::Brain
     } else {
         if cli.primary_robot_keyboard {
@@ -953,7 +953,7 @@ fn main() {
                         // TODO: Make configurable
                         reader.restart();
                     }
-                } else if ENABLE_ROBOT_BRAIN[0] {
+                } else {
                     brain.update(&mut robots[0]);
                 }
 

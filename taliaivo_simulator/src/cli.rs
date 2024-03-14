@@ -24,6 +24,10 @@ pub struct Cli {
     #[arg(short = 'S', long, default_value_t = false)]
     pub enable_secondary_robot: bool,
 
+    /// Enable secondary robot brain
+    #[arg(short = 'B', long, default_value_t = false)]
+    pub enable_secondary_robot_brain: bool,
+
     /// Drive primary robot using keyboard
     #[arg(short = 'k', long, default_value_t = false)]
     pub primary_robot_keyboard: bool,
