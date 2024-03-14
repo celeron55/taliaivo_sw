@@ -61,11 +61,15 @@ use taliaivo_common::map::HoughLine;
 mod command_accumulator;
 use command_accumulator::CommandAccumulator;
 
+const LOG_SENSORS_BY_DEFAULT: bool = false;
 const MAX_PWM: f32 = 0.40;
+
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
 const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
 const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
 const SERVO_TIMEOUT_S: f32 = 1.0;
+const MAX_SENSOR_DISTANCE_CM: f32 = 60.0;
+const MIN_SENSOR_DISTANCE_CM: f32 = 5.5;
 
 struct Robot {
     wheel_speed_left: f32,
@@ -453,7 +457,8 @@ mod app {
 
         let serial_usart1: Serial<stm32f4xx_hal::pac::USART1, u8> = Serial::new(
             cx.device.USART1,
-            (gpioa.pa9.into_alternate::<7>(), gpioa.pa10.into_alternate::<7>()),
+            (gpioa.pa9.into_alternate::<7>(),
+            gpioa.pa10.internal_pull_up(true).into_alternate::<7>()),
             Config::default().baudrate(115_200.bps()),
             &clocks
         ).unwrap();
@@ -474,10 +479,10 @@ mod app {
 
         let usb_serial = usbd_serial::SerialPort::new(unsafe { USB_BUS.as_ref().unwrap() });
 
-        // Use https://pid.codes/1209/0001/
         let usb_dev = UsbDeviceBuilder::new(
                 unsafe { USB_BUS.as_ref().unwrap() },
-                UsbVidPid(0x1209, 0x0001))
+                //UsbVidPid(0x1209, 0x0001)) // https://pid.codes/1209/0001/
+                UsbVidPid(0x0483, 0x5740)) // STMicroelectronics / Virtual COM Port
             .device_class(USB_CLASS_CDC)
             .strings(&[
                 StringDescriptors::new(usb_device::descriptor::lang_id::LangID::EN)
@@ -528,7 +533,7 @@ mod app {
                 adc_result: [0; ADC_NUM_CHANNELS],
                 drive_mode: DriveMode::Normal,
                 vbat_lowpass: 0.0,
-                log_sensors: false,
+                log_sensors: LOG_SENSORS_BY_DEFAULT,
                 servo_in1: servo_in1,
                 debug_pin: debug_pin,
             },
@@ -671,10 +676,10 @@ mod app {
                     let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                     let raw = adc_result[adc_indexes[i]];
                     let (distance_cm, detected) = {
-                        if raw < 220 {
-                            (90.0, false)
+                        if raw < (15000.0 / MAX_SENSOR_DISTANCE_CM) as u16 {
+                            (MAX_SENSOR_DISTANCE_CM + 1.0, false)
                         } else {
-                            ((15000.0 / raw as f32).max(5.5), true)
+                            ((15000.0 / raw as f32).max(MIN_SENSOR_DISTANCE_CM), true)
                         }
                     };
                     robot.proximity_sensor_readings.push((
@@ -888,14 +893,16 @@ mod app {
                         if log_sensors {
                             info!("S,P0,P1,P2,P3,P4,P5,GZ,WL,WR,VB");
                         }
-                    } else {
-                        info!("-> {:?} is an unknown command", command);
+                    } else if command == ArrayString::from("h").unwrap() ||
+                            command == ArrayString::from("help").unwrap() {
                         info!("Available commands:");
                         info!("  normal");
                         info!("  test");
                         info!("  stop");
                         info!("  log");
                         info!("  bat");
+                    } else {
+                        info!("?");
                     }
                 }
             }

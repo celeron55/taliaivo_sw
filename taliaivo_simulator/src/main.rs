@@ -45,6 +45,8 @@ const GROUP_ROBOT1_WEAPON: u32 = 0b00010000;
 
 const SENSOR_LOG_NUM_VALUES: usize = 10;
 
+const REPLAY_MAX_SENSOR_DISTANCE_CM: f32 = 60.0;
+
 struct SensorLogReader {
     value_lines: Vec<[f32; SENSOR_LOG_NUM_VALUES]>,
     next_i: usize,
@@ -960,8 +962,8 @@ fn main() {
                     for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
                         let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                         let (distance_cm, detected) = {
-                            if sensors[i] > 90.0 {
-                                (94.0, false)
+                            if sensors[i] > REPLAY_MAX_SENSOR_DISTANCE_CM {
+                                (REPLAY_MAX_SENSOR_DISTANCE_CM + 1.0, false)
                             } else {
                                 (sensors[i], true)
                             }
