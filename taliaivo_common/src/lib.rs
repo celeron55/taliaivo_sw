@@ -18,9 +18,11 @@ pub const UPS: u32 = 50; // Updates per second
 pub enum AlgorithmType {
     Mapper,
     Simple,
+    RotationInPlace,
 }
 pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Simple;
+//pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::RotationInPlace;
 
 const ENEMY_HISTORY_LENGTH: usize = 50;
 
@@ -295,6 +297,8 @@ impl BrainState {
             }
             AlgorithmType::Simple => {
             }
+            AlgorithmType::RotationInPlace => {
+            }
         };
 
         let servo_inputs = robot.get_rc_input_values();
@@ -362,6 +366,13 @@ impl BrainState {
         //info!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
 
         let (mut wanted_linear_speed, mut wanted_rotation_speed) = match ALGORITHM_TYPE {
+        AlgorithmType::RotationInPlace => {
+            if (self.counter % (UPS as u64 * 4)) < UPS as u64 * 2 {
+                (0.0, SCANNING_ROTATION_SPEED)
+            } else {
+                (0.0, -SCANNING_ROTATION_SPEED)
+            }
+        },
         AlgorithmType::Simple => {
             if self.proximity_sensor_readings.len() >= 6 {
                 let fwd = self.proximity_sensor_readings[0].1;

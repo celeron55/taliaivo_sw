@@ -563,6 +563,8 @@ impl Robot {
                     *transform,
                     g);*/
             }
+            taliaivo_common::AlgorithmType::RotationInPlace => {
+            }
         };
 
         let p = self.diagnostic_robot_p;
