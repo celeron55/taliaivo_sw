@@ -21,10 +21,9 @@ const PLAY_UPS: u64 = UPS; // Can be lowered for slow-mo effect
 //const PLAY_UPS: u64 = 33; // Can be lowered for slow-mo effect
 const DT: f32 = 1.0 / UPS as f32;
 
-const ENABLE_ROBOT_BRAIN: [bool; 2] = [true, false];
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
-const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
-const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
+//const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
+//const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
 
 const SIMULATE_LIDAR: bool = false;
 const SIMULATE_SWIPING_FRONT_SENSOR: bool = false;
@@ -688,6 +687,8 @@ struct KeyboardController {
     left: bool,
     right: bool,
     t_toggle: bool,
+    wheel_speed_left: f32,
+    wheel_speed_right: f32,
 }
 
 impl KeyboardController {
@@ -698,6 +699,8 @@ impl KeyboardController {
             left: false,
             right: false,
             t_toggle: true,
+            wheel_speed_left: 0.0,
+            wheel_speed_right: 0.0,
         }
     }
 
@@ -728,25 +731,30 @@ impl KeyboardController {
         let speed = 100.0;
         let turn_speed = 100.0;
 
-        let mut wheel_speed_left = 0.0;
-        let mut wheel_speed_right = 0.0;
+        let mut wanted_wheel_speed_left = 0.0;
+        let mut wanted_wheel_speed_right = 0.0;
         if self.up {
-            wheel_speed_left += speed;
-            wheel_speed_right += speed;
+            wanted_wheel_speed_left += speed;
+            wanted_wheel_speed_right += speed;
         }
         if self.down {
-            wheel_speed_left -= speed;
-            wheel_speed_right -= speed;
+            wanted_wheel_speed_left -= speed;
+            wanted_wheel_speed_right -= speed;
         }
         if self.left {
-            wheel_speed_left -= turn_speed;
-            wheel_speed_right += turn_speed;
+            wanted_wheel_speed_left -= turn_speed;
+            wanted_wheel_speed_right += turn_speed;
         }
         if self.right {
-            wheel_speed_left += turn_speed;
-            wheel_speed_right -= turn_speed;
+            wanted_wheel_speed_left += turn_speed;
+            wanted_wheel_speed_right -= turn_speed;
         }
-        (wheel_speed_left, wheel_speed_right)
+        let max_accel = taliaivo_common::MAX_ACCELERATION / UPS as f32;
+        self.wheel_speed_left = taliaivo_common::limit_acceleration(
+                self.wheel_speed_left, wanted_wheel_speed_left, max_accel);
+        self.wheel_speed_right = taliaivo_common::limit_acceleration(
+                self.wheel_speed_right, wanted_wheel_speed_right, max_accel);
+        (self.wheel_speed_left, self.wheel_speed_right)
     }
 }
 

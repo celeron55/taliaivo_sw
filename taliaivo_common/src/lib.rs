@@ -32,6 +32,8 @@ const ARENA_DIMENSION: f32 = 125.0; // cm. Used to predict opposing walls.
 // Weapon configuration
 const WEAPON_THROTTLE: f32 = 100.0;
 
+pub const MAX_ACCELERATION: f32 = 500.0;
+
 // General behavior configuration
 // Aggressiveness is tuned such that at and below 0.0 false positive attacks
 // don't occur on an empty arena.
@@ -99,7 +101,7 @@ pub trait BrainInterface {
     fn force_wheel_speeds(&mut self, _left_speed_cm_s: f32, _right_speed_cm_s: f32) {}
 }
 
-fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
+pub fn limit_acceleration(previous_value: f32, target_value: f32, max_change: f32) -> f32 {
     if target_value > previous_value {
         if previous_value + max_change > target_value {
             return target_value;
@@ -587,7 +589,7 @@ impl BrainState {
         let wanted_wheel_speed_right = wanted_linear_speed + wanted_rotation_speed * (track / 2.0);
 
         // Limit wheel speed changes, i.e. limit acceleration
-        let max_accel = 250.0 / UPS as f32;
+        let max_accel = MAX_ACCELERATION / UPS as f32;
         self.applied_wheel_speed_left = limit_acceleration(self.applied_wheel_speed_left,
                 wanted_wheel_speed_left, max_accel);
         self.applied_wheel_speed_right = limit_acceleration(self.applied_wheel_speed_right,
