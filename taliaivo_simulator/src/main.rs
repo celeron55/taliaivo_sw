@@ -723,10 +723,8 @@ impl KeyboardController {
             }
         }
     }
-}
 
-impl BrainInterface for KeyboardController {
-    fn update(&mut self, robot: &mut dyn RobotInterface) {
+    fn generate_wheel_speeds(&mut self) -> (f32, f32) {
         let speed = 100.0;
         let turn_speed = 100.0;
 
@@ -748,6 +746,13 @@ impl BrainInterface for KeyboardController {
             wheel_speed_left += turn_speed;
             wheel_speed_right -= turn_speed;
         }
+        (wheel_speed_left, wheel_speed_right)
+    }
+}
+
+impl BrainInterface for KeyboardController {
+    fn update(&mut self, robot: &mut dyn RobotInterface) {
+        let (wheel_speed_left, wheel_speed_right) = self.generate_wheel_speeds();
 
         robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
 
@@ -876,7 +881,11 @@ fn main() {
     let mut robot2_controller = if ENABLE_ROBOT_BRAIN[1] {
         RobotController::Brain
     } else {
-        RobotController::Keyboard
+        if cli.primary_robot_keyboard {
+            RobotController::Dummy
+        } else {
+            RobotController::Keyboard
+        }
     };
 
     let mut counter: u64 = 0;
@@ -1002,7 +1011,16 @@ fn main() {
                     }
                 } else {
                     let ref mut robot = robots[0];
-                    if force_stop_robot0_wheels {
+                    if cli.primary_robot_keyboard {
+                        // This is handled specially to allow the brain to
+                        // process the sensor data while keyboard controls the
+                        // wheel speeds
+                        let (wheel_speed_left, wheel_speed_right) =
+                                keyboard_controller.generate_wheel_speeds();
+                        brain.force_wheel_speeds(wheel_speed_left, wheel_speed_right);
+                        robot.wheel_speed_left = wheel_speed_left;
+                        robot.wheel_speed_right = wheel_speed_right;
+                    } else if force_stop_robot0_wheels {
                         brain.force_wheel_speeds(0.0, 0.0);
                         robot.wheel_speed_left = 0.0;
                         robot.wheel_speed_right = 0.0;
@@ -1044,8 +1062,20 @@ fn main() {
             match key {
                 Key::K => {
                     robot2_controller = match robot2_controller {
-                        RobotController::Brain => RobotController::Keyboard,
-                        RobotController::Dummy => RobotController::Keyboard,
+                        RobotController::Brain => {
+                            if cli.primary_robot_keyboard {
+                                RobotController::Dummy
+                            } else {
+                                RobotController::Keyboard
+                            }
+                        },
+                        RobotController::Dummy => {
+                            if cli.primary_robot_keyboard {
+                                RobotController::Brain
+                            } else {
+                                RobotController::Keyboard
+                            }
+                        }
                         RobotController::Keyboard => RobotController::Brain,
                     }
                 },
