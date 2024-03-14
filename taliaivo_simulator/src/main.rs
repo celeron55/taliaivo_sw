@@ -1071,16 +1071,30 @@ fn main() {
             match key {
                 Key::D1 => {
                     primary_robot_controller = match primary_robot_controller {
-                        RobotController::Brain => RobotController::Keyboard,
-                        RobotController::Keyboard => RobotController::Dummy,
+                        RobotController::Brain => RobotController::Dummy,
+                        RobotController::Keyboard => RobotController::Brain,
                         RobotController::Dummy => RobotController::Brain,
                     }
                 },
                 Key::D2 => {
                     secondary_robot_controller = match secondary_robot_controller {
+                        RobotController::Brain => RobotController::Dummy,
+                        RobotController::Keyboard => RobotController::Brain,
+                        RobotController::Dummy => RobotController::Brain,
+                    }
+                },
+                Key::Q => {
+                    primary_robot_controller = match primary_robot_controller {
                         RobotController::Brain => RobotController::Keyboard,
                         RobotController::Keyboard => RobotController::Dummy,
-                        RobotController::Dummy => RobotController::Brain,
+                        RobotController::Dummy => RobotController::Keyboard,
+                    }
+                },
+                Key::W => {
+                    secondary_robot_controller = match secondary_robot_controller {
+                        RobotController::Brain => RobotController::Keyboard,
+                        RobotController::Keyboard => RobotController::Dummy,
+                        RobotController::Dummy => RobotController::Keyboard,
                     }
                 },
                 Key::S => {
