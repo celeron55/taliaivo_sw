@@ -590,34 +590,10 @@ mod app {
         ]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
-        // Figure out what drive mode to go into initially
-        {
-            // Wait for the ADC task to read all channels
-            Systick::delay(20.millis()).await;
-
-            // Now we can check the battery voltage and determine whether we're
-            // being powered by:
-            // - a programming set-up
-            //   -> Go into stop mode
-            // - cold start by main switch
-            //   -> Go into normal mode
-            let vbat = cx.shared.adc_result.lock(|adc_result| {
-                    adc_scale_vbat(adc_result[6]) });
-            info!("-!- Initial vbat: {:?}", vbat);
-            let initial_mode = if vbat < 6.0 {
-                DriveMode::Stop
-            } else {
-                DriveMode::Normal
-            };
-            cx.shared.drive_mode.lock(|v| { *v = initial_mode; });
-            info!("-!- Selected initial mode: {:?}", initial_mode);
-        }
-
         let mut brain = BrainState::new(0);
         let mut robot: Robot = Robot::new();
 
         let interval_ms = 1000 / taliaivo_common::UPS as u64;
-        //let interval_ms = 1000;
         loop {
             let t0 = Systick::now().duration_since_epoch().to_millis();
 
