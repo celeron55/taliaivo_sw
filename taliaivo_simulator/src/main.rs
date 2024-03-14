@@ -24,6 +24,8 @@ const DT: f32 = 1.0 / UPS as f32;
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.45; // Not very stable
 //const ROBOT_FRICTION_NORMAL_FORCE_PER_WHEEL: f32 = 9.81 * 0.15;
 //const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
+const ROBOT_PHYSICS_ACCELERATION_LIMIT: f32 = 250.0;
+const ROBOT_PHYSICS_ANGULAR_ACCELERATION_LIMIT: f32 = PI as f32 * 2.0 * 8.0;
 
 const SIMULATE_LIDAR: bool = false;
 const SIMULATE_SWIPING_FRONT_SENSOR: bool = false;
@@ -342,13 +344,13 @@ impl Robot {
             //println!("robot_orientation: {:?}", robot_orientation);
             let mut forward = Vector2::<f32>::new(-robot_orientation.im, robot_orientation.re);
             let wanted_linvel = forward * (self.wheel_speed_left + self.wheel_speed_right) / 2.0;
-            let max_dv = 5.0; // TODO: Calculate based on UPS and friction
+            let max_dv = ROBOT_PHYSICS_ACCELERATION_LIMIT / UPS as f32;
             robot_linvel.x = limit_change(robot_linvel.x, wanted_linvel.x, max_dv);
             robot_linvel.y = limit_change(robot_linvel.y, wanted_linvel.y, max_dv);
             body.set_linvel(robot_linvel, true);
             // TODO: Replace 0.04 with value calculated from track width
             let wanted_angvel = (self.wheel_speed_left - self.wheel_speed_right) * 0.04;
-            let max_da = 2.0; // TODO: Calculate based on UPS, friction and track width
+            let max_da = ROBOT_PHYSICS_ANGULAR_ACCELERATION_LIMIT / UPS as f32;
             robot_angvel = limit_change(robot_angvel, wanted_angvel, max_da);
             body.set_angvel(robot_angvel, true);
 
