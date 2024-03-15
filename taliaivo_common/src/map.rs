@@ -16,7 +16,7 @@ pub const MAP_H: u32 = MAP_W;
 pub const MAP_SIZE: usize = (MAP_W * MAP_H) as usize;
 
 // Hough parameters
-const HOUGH_THRESHOLD: usize = (30.0 / MAP_T) as usize;
+const HOUGH_THRESHOLD: usize = (40.0 / MAP_T) as usize;
 const KEEP_NUM_TOP_LINES: usize = 2;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 20;
 const EDGE_MIN_POS: f32 = 50.0;
