@@ -21,6 +21,7 @@ pub enum SensorType {
     Swiping,
 }
 //pub const SENSOR_TYPE: SensorType = SensorType::Static6;
+//pub const SENSOR_TYPE: SensorType = SensorType::Lidar;
 pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
 
 pub enum AlgorithmType {
