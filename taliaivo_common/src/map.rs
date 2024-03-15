@@ -15,6 +15,21 @@ pub const MAP_W: u32 = (MAP_W_REAL / MAP_T) as u32; // Map width in tiles
 pub const MAP_H: u32 = MAP_W;
 pub const MAP_SIZE: usize = (MAP_W * MAP_H) as usize;
 
+// Hough parameters
+const HOUGH_THRESHOLD: usize = (30.0 / MAP_T) as usize;
+const KEEP_NUM_TOP_LINES: usize = 2;
+pub const MAX_NUM_LINE_CANDIDATES: usize = 20;
+const EDGE_MIN_POS: f32 = 50.0;
+const EDGE_MAX_NEG: f32 = -15.0;
+const MAX_DISTANCE: i32 = MAP_W as i32;
+const DISTANCE_STEP: usize = 2; // Distance resolution (tiles)
+const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
+const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
+const NUM_ANGLES: usize = 360 / ANGLE_STEP;
+
+//const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
+//const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
+
 #[derive(Clone)]
 pub struct Map {
     pub tile_wh: f32,
@@ -338,21 +353,6 @@ impl Map {
         score
     }
 }
-
-const MAX_DISTANCE: i32 = MAP_W as i32;
-const DISTANCE_STEP: usize = 2; // Distance resolution (tiles)
-const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
-const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
-const NUM_ANGLES: usize = 360 / ANGLE_STEP;
-
-const HOUGH_THRESHOLD: usize = (40.0 / MAP_T) as usize;
-const KEEP_NUM_TOP_LINES: usize = 2;
-pub const MAX_NUM_LINE_CANDIDATES: usize = 20;
-const EDGE_MIN_POS: f32 = 50.0;
-const EDGE_MAX_NEG: f32 = -15.0;
-
-//const ANGLE_SIMILARITY_THRESHOLD: f32 = 20.0;
-//const DISTANCE_SIMILARITY_THRESHOLD: f32 = 25.0;
 
 type Accumulator = ArrayVec<ArrayVec<u16, NUM_DISTANCES>, NUM_ANGLES>;
 

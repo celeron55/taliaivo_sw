@@ -20,8 +20,8 @@ pub enum SensorType {
     Lidar,
     Swiping,
 }
-pub const SENSOR_TYPE: SensorType = SensorType::Static6;
-//pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
+//pub const SENSOR_TYPE: SensorType = SensorType::Static6;
+pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
 
 pub enum AlgorithmType {
     Mapper,
@@ -75,6 +75,7 @@ const ATTACK_SCANNING_ROTATION_SPEED: f32 = match SENSOR_TYPE {
 const ATTACK_SCANNING_FREQUENCY: f32 = 10.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
+const SCAN_FORWARD_PREFERRED_DISTANCE: f32 = ARENA_DIMENSION * 0.333;
 
 const MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE: f32 = 3.2;
 
@@ -346,11 +347,15 @@ impl BrainState {
         /*info!("gyro_based_rotation_speed_filtered: {:?}, wheel_based: {:?}",
                 self.gyro_based_rotation_speed_filtered, self.wheel_based_rotation_speed_filtered);*/
         // TODO: Do something similar based on the accelerometer
+
         // TODO: Make useful and re-enable (gyro and wheel speeds have to be in
         // reasonable sync in reality, otherwise this messes things up)
         /*let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
                 self.wheel_based_rotation_speed_filtered).abs() > PI * 1.5;*/
-        let out_of_control_turn = false;
+        //let out_of_control_turn = false;
+        // This only detects hard hits
+        let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
+                self.wheel_based_rotation_speed_filtered).abs() > PI * 3.0;
         if out_of_control_turn {
             self.map.global_forget(0.9);
         }
@@ -899,10 +904,12 @@ impl BrainState {
         };
         // A bit more priority (negative score) could be put on forgotten area
         // in order to generate exploration targets
-        let robot_tile_p = self.pos.coords * (1.0 / self.map.tile_wh);
+        let direction: Vector2<f32> = Vector2::new(self.rot.cos(), self.rot.sin());
+        let prelim_p = self.pos.coords + direction * SCAN_FORWARD_PREFERRED_DISTANCE;
+        let prelim_tile_p = prelim_p * (1.0 / self.map.tile_wh);
         let result_maybe = self.map.find_pattern_starting_at(
                 &pattern, pattern_w, pattern_h, 10.0, 0.1, wall_filter,
-                robot_tile_p.x as i32, robot_tile_p.y as i32);
+                prelim_tile_p.x as i32, prelim_tile_p.y as i32);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(
