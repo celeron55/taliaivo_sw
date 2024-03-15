@@ -2,7 +2,8 @@ use piston_window::*;
 use rapier2d::prelude::*;
 use nalgebra::{Vector2, Point2, UnitComplex};
 use std::f64::consts::PI;
-use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface, NUM_SERVO_INPUTS};
+use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface, NUM_SERVO_INPUTS,
+        SensorType, SENSOR_TYPE};
 use arrayvec::ArrayVec;
 use taliaivo_common::map::HoughLine;
 use rand::distributions::{Distribution, Uniform};
@@ -26,9 +27,6 @@ const DT: f32 = 1.0 / UPS as f32;
 //const ROBOT_FRICTION_COEFFICIENT: f32 = 0.8;
 const ROBOT_PHYSICS_ACCELERATION_LIMIT: f32 = 250.0;
 const ROBOT_PHYSICS_ANGULAR_ACCELERATION_LIMIT: f32 = PI as f32 * 2.0 * 8.0;
-
-const SIMULATE_LIDAR: bool = false;
-const SIMULATE_SWIPING_FRONT_SENSOR: bool = true;
 
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
 const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
@@ -464,18 +462,20 @@ impl Robot {
         // be clamped
         let min_detection_distance: f32 = 7.0;
 
-        let position_sensor_angles = if SIMULATE_LIDAR {
+        let position_sensor_angles = match SENSOR_TYPE {
+            SensorType::Static6 =>
+                [0.0, -45.0, 45.0, -90.0, 90.0, 180.0],
+                //[0.0, -45.0, 45.0, -135.0, 135.0, 180.0],
+            SensorType::Lidar => [
             // Simulate a lidar turret (have to have the same number of entries)
-            [
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0) % 360.0,
                 (tick_count as f32 / UPS as f32 * 5.0 * 360.0 + 180.0) % 360.0,
-            ]
-        } else if SIMULATE_SWIPING_FRONT_SENSOR {
-            [
+            ],
+            SensorType::Swiping => [
                 (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 55.0 - 35.0,
                 (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 55.0 + 35.0,
                 //180.0,
@@ -483,10 +483,7 @@ impl Robot {
                 1000.0, // Disabled
                 1000.0, // Disabled
                 1000.0, // Disabled
-            ]
-        } else {
-            [0.0, -45.0, 45.0, -90.0, 90.0, 180.0]
-            //[0.0, -45.0, 45.0, -135.0, 135.0, 180.0]
+            ],
         };
 
         if let Some(body) = rigid_body_set.get(self.body_handle) {

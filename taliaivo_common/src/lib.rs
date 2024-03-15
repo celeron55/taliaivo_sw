@@ -15,6 +15,14 @@ pub use map::*;
 
 pub const UPS: u32 = 50; // Updates per second
 
+pub enum SensorType {
+    Static6,
+    Lidar,
+    Swiping,
+}
+pub const SENSOR_TYPE: SensorType = SensorType::Static6;
+//pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
+
 pub enum AlgorithmType {
     Mapper,
     Simple,
@@ -53,9 +61,17 @@ const MAX_LINEAR_SPEED: f32 = 40.0;
 const MAX_ROTATION_SPEED: f32 = PI * 3.0;
 const ATTACK_LINEAR_SPEED: f32 = 70.0;
 const ATTACK_ROTATION_SPEED: f32 = PI * 3.0;
-const SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
+const SCANNING_ROTATION_SPEED: f32 = match SENSOR_TYPE {
+    SensorType::Static6 => MAX_ROTATION_SPEED * 1.0,
+    SensorType::Lidar => 0.0,
+    SensorType::Swiping => 0.0,
+};
 const SCANNING_FREQUENCY: f32 = 5.0;
-const ATTACK_SCANNING_ROTATION_SPEED: f32 = MAX_ROTATION_SPEED * 1.0;
+const ATTACK_SCANNING_ROTATION_SPEED: f32 = match SENSOR_TYPE {
+    SensorType::Static6 => MAX_ROTATION_SPEED * 1.0,
+    SensorType::Lidar => 0.0,
+    SensorType::Swiping => 0.0,
+};
 const ATTACK_SCANNING_FREQUENCY: f32 = 10.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
