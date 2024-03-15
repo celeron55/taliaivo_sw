@@ -80,6 +80,9 @@ const PROXIMITY_SENSOR_ADCS: [usize; PROXIMITY_SENSOR_COUNT] =
         //[2, 3, 1, 4, 0, 5];
         [2, 2, 2, 4, 0, 5]; // Disable -45 and +45
 
+const SERVO_DUTY_CLOCKS_MIN: u16 = 27800;
+const SERVO_DUTY_CLOCKS_MAX: u16 = 53200;
+
 struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
@@ -619,7 +622,9 @@ mod app {
                     // to detect loss of transmitter signal or a broken
                     // receiver.
                     //info!("Servo input 1: {:?} / {:?}", duty_clocks, period_clocks);
-                    if period_clocks != *cx.local.servo_in1_last_period {
+                    if period_clocks != *cx.local.servo_in1_last_period &&
+                            duty_clocks >= SERVO_DUTY_CLOCKS_MIN &&
+                            duty_clocks <= SERVO_DUTY_CLOCKS_MAX {
                         *cx.local.servo_in1_timeout_counter = 0;
                     }
                     *cx.local.servo_in1_last_period = period_clocks;
@@ -627,7 +632,8 @@ mod app {
                 robot.servo_in1 = {
                     if *cx.local.servo_in1_timeout_counter <
                             (taliaivo_common::UPS as f32 * SERVO_TIMEOUT_S) as u32 {
-                        (duty_clocks as f32 - 27800.0) / (53200.0 - 27800.0)
+                        (duty_clocks as f32 - SERVO_DUTY_CLOCKS_MIN as f32) /
+                            (SERVO_DUTY_CLOCKS_MAX - SERVO_DUTY_CLOCKS_MIN) as f32
                     } else {
                         0.0
                     }

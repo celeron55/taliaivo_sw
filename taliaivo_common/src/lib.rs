@@ -258,6 +258,7 @@ pub struct BrainState {
     gyro_based_rotation_speed_filtered: f32,
     wheel_based_rotation_speed_filtered: f32,
     u_turn_direction: f32,
+    filtered_servo_input: f32,
     // New algorithm
     enemy_position: Option<Point2<f32>>,
     enemy_detect_timestamp: Option<u64>,
@@ -289,6 +290,7 @@ impl BrainState {
             gyro_based_rotation_speed_filtered: 0.0,
             wheel_based_rotation_speed_filtered: 0.0,
             u_turn_direction: -1.0,
+            filtered_servo_input: 0.0,
             enemy_position: None,
             enemy_detect_timestamp: None,
             wall_position: None,
@@ -323,7 +325,8 @@ impl BrainState {
         };
 
         let servo_inputs = robot.get_rc_input_values();
-        let robot_enabled = servo_inputs[0] > 0.5;
+        self.filtered_servo_input = servo_inputs[0] * 0.2 + self.filtered_servo_input * 0.8;
+        let robot_enabled = self.filtered_servo_input > 0.5;
         //info!("servo_inputs: {:?}, robot_enabled: {:?}", servo_inputs, robot_enabled);
 
         let track = robot.get_track_width();
