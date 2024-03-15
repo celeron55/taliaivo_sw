@@ -76,6 +76,7 @@ const ATTACK_SCANNING_FREQUENCY: f32 = 10.0;
 const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 10.0;
 const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 20.0;
 const SCAN_FORWARD_PREFERRED_DISTANCE: f32 = ARENA_DIMENSION * 0.333;
+const GUESS_OPPOSING_WALLS: bool = false;
 
 const MOTOR_CUTOFF_BATTERY_CELL_VOLTAGE: f32 = 3.2;
 
@@ -355,7 +356,7 @@ impl BrainState {
         //let out_of_control_turn = false;
         // This only detects hard hits
         let out_of_control_turn = (self.gyro_based_rotation_speed_filtered -
-                self.wheel_based_rotation_speed_filtered).abs() > PI * 3.0;
+                self.wheel_based_rotation_speed_filtered).abs() > PI * 6.0;
         if out_of_control_turn {
             self.map.global_forget(0.9);
         }
@@ -555,14 +556,16 @@ impl BrainState {
                         line.angle, line.distance, line.votes);
             }*/
 
-            // Guess opposing wall positions and add them also
-            let arena_dimension_tiles = ARENA_DIMENSION / self.map.tile_wh;
-            let mut new_wall_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
-            for line in &self.wall_lines {
-                let line2 = line.move_towards_point(robot_tile_position, arena_dimension_tiles);
-                new_wall_lines.push(line2);
+            if GUESS_OPPOSING_WALLS {
+                // Guess opposing wall positions and add them also
+                let arena_dimension_tiles = ARENA_DIMENSION / self.map.tile_wh;
+                let mut new_wall_lines: ArrayVec<HoughLine, MAX_NUM_LINE_CANDIDATES> = ArrayVec::new();
+                for line in &self.wall_lines {
+                    let line2 = line.move_towards_point(robot_tile_position, arena_dimension_tiles);
+                    new_wall_lines.push(line2);
+                }
+                self.wall_lines.extend(new_wall_lines);
             }
-            self.wall_lines.extend(new_wall_lines);
 
             robot.report_map(&self.map, self.pos, self.rot, self.attack_p, self.scan_p,
                     self.wall_avoid_p, &self.wall_lines);
