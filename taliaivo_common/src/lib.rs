@@ -883,8 +883,10 @@ impl BrainState {
         };
         // A bit more priority (negative score) could be put on forgotten area
         // in order to generate exploration targets
-        let result_maybe = self.map.find_pattern(
-                &pattern, pattern_w, pattern_h, 10.0, 0.1, wall_filter);
+        let robot_tile_p = self.pos.coords * (1.0 / self.map.tile_wh);
+        let result_maybe = self.map.find_pattern_starting_at(
+                &pattern, pattern_w, pattern_h, 10.0, 0.1, wall_filter,
+                robot_tile_p.x as i32, robot_tile_p.y as i32);
         if let Some(result) = result_maybe {
             // Target the center of the pattern
             let target_p = Point2::new(

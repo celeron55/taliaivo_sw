@@ -11,3 +11,8 @@ nalgebra = { version = "0.32.3", default-features = false, features = [ "libm" ]
 ringbuffer = { version = "0.15.0", default-features = false, features = [] }
 micromath = "2.1.0"
 log = { version = "0.4" }
+fixedstr = { version = "0.5", features = ["no-alloc"] }
+
+[dev-dependencies]
+stderrlog = { version = "0.6.0" }
+

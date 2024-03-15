@@ -1,10 +1,12 @@
 extern crate arrayvec; // Use static arrays like the embedded code
 
-use arrayvec::ArrayVec;
-//use libc_print::std_name::{println, print};
+use arrayvec::{ArrayVec, ArrayString};
 use nalgebra::{Vector2, Point2};
 use micromath::F32Ext; // f32.sin and f32.cos
 use core::cmp::Ordering;
+#[allow(unused_imports)]
+use log::{info, warn};
+use fixedstr::str_format;
 
 pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm
@@ -121,31 +123,32 @@ impl Map {
         self.data = new_data;
     }
 
-    /*pub fn print(&self, robot_pos: Point2<f32>) {
+    pub fn print(&self, robot_pos: Point2<f32>) {
         let robot_x = (robot_pos.x / self.tile_wh).round() as u32;
         let robot_y = (robot_pos.y / self.tile_wh).round() as u32;
         for y in 0..self.height {
+            let mut line = ArrayString::<100>::new();
             for x in 0..self.width {
                 let idx = (y * self.width + x) as usize;
                 let tile_value = self.data[idx];
                 let symbol = if robot_x == x && robot_y == y {
-                    "R"
+                    'R'
                 } else if tile_value < -50.0 {
-                    " "
+                    ' '
                 } else if tile_value < -10.0 {
-                    "."
+                    '.'
                 } else if tile_value < 10.0 {
-                    "+"
+                    '+'
                 } else if tile_value < 50.0 {
-                    "x"
+                    'x'
                 } else {
-                    "X"
+                    'X'
                 };
-                print!(" {}", symbol);
+                line.push(symbol);
             }
-            println!(); // New line at the end of each row
+            info!("{}", line);
         }
-    }*/
+    }
 
     pub fn find_pattern<F>(&self, pattern: &[f32], pattern_width: u32, pattern_height: u32,
             ignore_map_below_significance: f32, score_for_ignore: f32, filter: F)
@@ -163,6 +166,46 @@ impl Map {
                         best_score = score;
                         best_match = Some((x, y, score));
                     }
+                }
+            }
+        }
+
+        best_match
+    }
+
+    // Finds pattern in such a way that if there are multiple matches with the
+    // same score, the one closest to the given point is chosen
+    pub fn find_pattern_starting_at<F>(
+            &self, pattern: &[f32], pattern_width: u32, pattern_height: u32,
+            ignore_map_below_significance: f32, score_for_ignore: f32, filter: F,
+            x0: i32, y0: i32)
+            -> Option<(u32, u32, f32)>
+    where F: Fn(u32, u32) -> bool {
+        let mut best_match = None;
+        let mut best_score = f32::MAX;
+
+        // TODO: Iterate the right amount
+        for i in 0..(self.height.saturating_sub(pattern_height) *
+                self.width.saturating_sub(pattern_width)) {
+            let (x1, y1) = inverse_spiral_index(i);
+            let x = x0 - pattern_width as i32 / 2 + x1;
+            let y = y0 - pattern_height as i32 / 2 + y1;
+            //info!("({}, {}) ({}, {}) ({}, {}) ({}, {})", x1, y1, x, y,
+            //        pattern_width, pattern_height, self.width, self.height);
+            if x < 0 || x > self.width.saturating_sub(pattern_width) as i32 {
+                continue;
+            }
+            if y < 0 || y > self.height.saturating_sub(pattern_height) as i32 {
+                continue;
+            }
+            let x: u32 = x.try_into().unwrap();
+            let y: u32 = y.try_into().unwrap();
+            if filter(x, y) {
+                let score = self.calculate_match_score(x, y, pattern, pattern_width, pattern_height,
+                        ignore_map_below_significance, score_for_ignore);
+                if score < best_score {
+                    best_score = score;
+                    best_match = Some((x, y, score));
                 }
             }
         }
@@ -190,6 +233,49 @@ impl Map {
         }
 
         score
+    }
+}
+
+pub fn iterate_outwards_from_center(len: u32, i: u32) -> u32 {
+    let center = len / 2;
+    if (i % 2) == 0 {
+        center + i / 2
+    } else {
+        center - (i + 1) / 2
+    }
+}
+
+pub fn inverse_spiral_index(index: u32) -> (i32, i32) {
+    // Special cases for the initial indices of the spiral
+    match index {
+        0 => return (0, 0),
+        1 => return (0, -1),
+        2 => return (1, -1),
+        3 => return (1, 0),
+        4 => return (1, 1),
+        5 => return (0, 1),
+        6 => return (-1, 1),
+        7 => return (-1, 0),
+        8 => return (-1, -1),
+        _ => {}
+    };
+
+    let index = (index + 1) as i32;
+
+    let layer = (((index as f32).sqrt() - 1.0) / 2.0).ceil() as i32;
+    let prev_layer_end = (2 * (layer - 1) + 1).pow(2);
+    let pos_in_layer = index - prev_layer_end - 1;
+    let side_len = layer * 2;
+
+    let side = pos_in_layer / side_len;
+    let pos_in_side = pos_in_layer % side_len;
+    let offset = pos_in_side - (layer - 1);
+
+    match side {
+        0 => (offset, -layer),
+        1 => (layer, offset),
+        2 => (-offset, layer),
+        _ => (-layer, -offset),
     }
 }
 
@@ -377,8 +463,8 @@ pub fn calculate_intersection(ray_origin: Vector2<f32>, ray_direction: Vector2<f
         let line_direction = Vector2::new((angle_rad+f32::pi()*0.5).cos(),
                 (angle_rad+f32::pi()*0.5).sin());
 
-        println!("Line at: p(tiles)={:?}, direction={:?}", line_point, line_direction);
-        println!("Ray at: o(tiles)={:?}, direction={:?}", ray_origin, ray_direction);
+        info!("Line at: p(tiles)={:?}, direction={:?}", line_point, line_direction);
+        info!("Ray at: o(tiles)={:?}, direction={:?}", ray_origin, ray_direction);
     }*/
     
     // Line equation: x cos(theta) + y sin(theta) = rho
@@ -424,7 +510,7 @@ impl Map {
                         let distance_index = distance as usize / DISTANCE_STEP;
                         if distance >= 0.0 && distance < MAX_DISTANCE as f32 &&
                                 distance_index < NUM_DISTANCES {
-                           /* println!("x: {:?}, y: {:?}, distance: {:?}, angle: {:?} -> angle_index: {:?}, distance_index: {:?}",
+                           /* info!("x: {:?}, y: {:?}, distance: {:?}, angle: {:?} -> angle_index: {:?}, distance_index: {:?}",
                                     x, y, distance, angle, angle_index, distance_index);*/
                             accumulator[angle_index][distance_index] += 1;
                         }
@@ -474,7 +560,7 @@ impl Map {
         // Find peaks in the accumulator
         for (angle_index, distances) in accumulator.iter().enumerate() {
             for (distance_index, &votes) in distances.iter().enumerate() {
-                //println!("votes: {:?}", votes);
+                //info!("votes: {:?}", votes);
                 if votes as usize >= HOUGH_THRESHOLD {
                     let angle = angle_index as f32 * ANGLE_STEP as f32;
                     let distance = distance_index as f32 * DISTANCE_STEP as f32 +
@@ -602,7 +688,7 @@ mod tests {
         let lines = map.hough_transform();
 
         for line in &lines {
-            println!("HoughLine: angle={:?} distance={:?} votes={:?}",
+            info!("HoughLine: angle={:?} distance={:?} votes={:?}",
                     line.angle, line.distance, line.votes);
         }
 
@@ -642,14 +728,14 @@ mod tests {
         let lines = map.hough_transform();
 
         for line in &lines {
-            println!("HoughLine: angle={:?} distance={:?} votes={:?}",
+            info!("HoughLine: angle={:?} distance={:?} votes={:?}",
                     line.angle, line.distance, line.votes);
         }
 
         // Ideally we would get a 45 degree line at 141.42 / map.tile_wh
         // distance, but instead we get 40 and 50 degree lines at distances
         // close to this one
-        for i in 0..4 {
+        for i in 0..(4.min(KEEP_NUM_TOP_LINES - 1)) {
             assert!((lines[i].angle - 45.0).abs() <= 5.0);
             assert!((lines[i].distance - 141.42 / map.tile_wh).abs() <= 2.5);
             if i != 3 {
@@ -667,7 +753,7 @@ mod tests {
         let ray_origin = Vector2::new(0.0, 5.0);
         let ray_direction = Vector2::new(1.0, 0.0);
         let r = calculate_intersection(ray_origin, ray_direction, &line);
-        println!("r: {:?}", r);
+        info!("r: {:?}", r);
         assert!(!r.is_none());
         if let Some(intersection_point) = r {
             // The intersection should happen at (10, 5)
@@ -683,7 +769,7 @@ mod tests {
         let ray_origin = Vector2::new(0.0, 5.0);
         let ray_direction = Vector2::new(1.0, 0.0);
         let r = calculate_intersection(ray_origin, ray_direction, &line);
-        println!("r: {:?}", r);
+        info!("r: {:?}", r);
         assert!(!r.is_none());
         if let Some(intersection_point) = r {
             // Should intersect at Y=5 because our ray travels parallel to X
@@ -715,10 +801,10 @@ mod tests {
 
     fn assert_vector_eq_with_tolerance(vec1: Vector2<f32>, vec2: Vector2<f32>, tolerance: f32) {
         if (vec1.x - vec2.x).abs() >= tolerance || (vec1.y - vec2.y).abs() >= tolerance {
-            println!("Assertion failed: Vectors not equal within tolerance");
-            println!("Actual vector:   [{}, {}]", vec1.x, vec1.y);
-            println!("Expected vector: [{}, {}]", vec2.x, vec2.y);
-            println!("Tolerance: {}", tolerance);
+            info!("Assertion failed: Vectors not equal within tolerance");
+            info!("Actual vector:   [{}, {}]", vec1.x, vec1.y);
+            info!("Expected vector: [{}, {}]", vec2.x, vec2.y);
+            info!("Tolerance: {}", tolerance);
             panic!("Vectors differ beyond tolerance");
         }
     }
@@ -750,6 +836,72 @@ mod tests {
         let point_right = Vector2::new(15.0, 0.0);
         let vector_right = line.vector_to_point(point_right);
         assert_vector_eq_with_tolerance(vector_right, Vector2::new(5.0, 0.0), FLOAT_TOLERANCE);
+    }
+
+    #[test]
+    fn test_iterate_outwards_from_center() {
+        assert_eq!(iterate_outwards_from_center(1, 0), 0);
+
+        assert_eq!(iterate_outwards_from_center(2, 0), 1);
+        assert_eq!(iterate_outwards_from_center(2, 1), 0);
+
+        assert_eq!(iterate_outwards_from_center(3, 0), 1);
+        assert_eq!(iterate_outwards_from_center(3, 1), 0);
+        assert_eq!(iterate_outwards_from_center(3, 2), 2);
+
+        assert_eq!(iterate_outwards_from_center(4, 0), 2);
+        assert_eq!(iterate_outwards_from_center(4, 1), 1);
+        assert_eq!(iterate_outwards_from_center(4, 2), 3);
+        assert_eq!(iterate_outwards_from_center(4, 3), 0);
+
+        assert_eq!(iterate_outwards_from_center(5, 0), 2);
+        assert_eq!(iterate_outwards_from_center(5, 1), 1);
+        assert_eq!(iterate_outwards_from_center(5, 2), 3);
+        assert_eq!(iterate_outwards_from_center(5, 3), 0);
+        assert_eq!(iterate_outwards_from_center(5, 4), 4);
+    }
+
+    #[test]
+    fn test_inverse_spiral_index() {
+        stderrlog::new()
+            .verbosity(log::LevelFilter::Info)
+            .init().unwrap();
+
+        const D: usize = 15;
+        let mut table: [u32; D*D] = [1337; D*D];
+        for i in 0..(D*D) as u32 {
+            let (x, y) = inverse_spiral_index(i);
+            //info!("inverse_spiral_index({}) -> {:?}", i, (x, y));
+            let table_i = ((y + D as i32 / 2) * D as i32 + (x + D as i32 / 2)) as usize;
+            table[table_i] = i;
+        }
+        info!("inverse_spiral_index():");
+        for y in 0..D {
+            let mut line = ArrayString::<100>::new();
+            for x in 0..D {
+                let table_i = y * D + x;
+                let i = table[table_i];
+                let s = str_format!(fixedstr::str8, "{:>3}", i);
+                line.push_str(&s);
+                line.push_str(",");
+            }
+            info!("{}", line);
+        }
+
+        // Initial 9 special cases
+        assert_eq!(inverse_spiral_index( 0), (0, 0));
+        assert_eq!(inverse_spiral_index( 1), (0, -1));
+        assert_eq!(inverse_spiral_index( 2), (1, -1));
+        assert_eq!(inverse_spiral_index( 8), (-1, -1));
+        // Actual spiral
+        assert_eq!(inverse_spiral_index( 9), (-1, -2));
+        assert_eq!(inverse_spiral_index(10), (0, -2));
+        assert_eq!(inverse_spiral_index(11), (1, -2));
+        assert_eq!(inverse_spiral_index(12), (2, -2));
+        assert_eq!(inverse_spiral_index(13), (2, -1));
+        assert_eq!(inverse_spiral_index(14), (2, 0));
+        assert_eq!(inverse_spiral_index(15), (2, 1));
+        assert_eq!(inverse_spiral_index(30), (3, -3));
     }
 }
 
