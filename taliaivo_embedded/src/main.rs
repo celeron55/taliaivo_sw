@@ -616,15 +616,12 @@ mod app {
                 let duty_clocks = servo_in1.get_duty_cycle_clocks();
                 let period_clocks = servo_in1.get_period_clocks();
                 if servo_in1.is_valid_capture() {
-                    // The range of values is roughly 27800...53200
                     // When the receiver stops giving out pulses in its failsafe
                     // mode, period_clocks stops containing noise. This is used
                     // to detect loss of transmitter signal or a broken
                     // receiver.
                     //info!("Servo input 1: {:?} / {:?}", duty_clocks, period_clocks);
-                    if period_clocks != *cx.local.servo_in1_last_period &&
-                            duty_clocks >= SERVO_DUTY_CLOCKS_MIN &&
-                            duty_clocks <= SERVO_DUTY_CLOCKS_MAX {
+                    if period_clocks != *cx.local.servo_in1_last_period {
                         *cx.local.servo_in1_timeout_counter = 0;
                     }
                     *cx.local.servo_in1_last_period = period_clocks;
