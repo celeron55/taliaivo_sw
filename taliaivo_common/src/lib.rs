@@ -25,6 +25,8 @@ pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::RotationInPlace;
 
 const ENEMY_HISTORY_LENGTH: usize = 50;
+//const MAPPER_FORGET_RATE: f32 = 0.004 * (125.0 / ARENA_DIMENSION);
+const MAPPER_FORGET_RATE: f32 = 0.010 * (125.0 / ARENA_DIMENSION);
 
 // Arena configuration
 // TODO: Remember to adjust this for the target arena
@@ -293,7 +295,7 @@ impl BrainState {
         match ALGORITHM_TYPE {
             AlgorithmType::Mapper => {
                 // 0.998 works for keeping up to date with a 125x125cm arena at 100 UPS
-                self.map.global_forget(1.0 - 0.004 * (125.0 / ARENA_DIMENSION));
+                self.map.global_forget(1.0 - MAPPER_FORGET_RATE);
             }
             AlgorithmType::Simple => {
             }

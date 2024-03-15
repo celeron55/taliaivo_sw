@@ -259,9 +259,9 @@ const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
 const NUM_ANGLES: usize = 360 / ANGLE_STEP;
 
-const HOUGH_THRESHOLD: usize = (65.0 / MAP_T) as usize;
-const KEEP_NUM_TOP_LINES: usize = 7;
-pub const MAX_NUM_LINE_CANDIDATES: usize = 50;
+const HOUGH_THRESHOLD: usize = (40.0 / MAP_T) as usize;
+const KEEP_NUM_TOP_LINES: usize = 2;
+pub const MAX_NUM_LINE_CANDIDATES: usize = 20;
 const EDGE_MIN_POS: f32 = 50.0;
 const EDGE_MAX_NEG: f32 = -15.0;
 

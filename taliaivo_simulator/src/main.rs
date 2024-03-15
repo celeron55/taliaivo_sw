@@ -28,7 +28,7 @@ const ROBOT_PHYSICS_ACCELERATION_LIMIT: f32 = 250.0;
 const ROBOT_PHYSICS_ANGULAR_ACCELERATION_LIMIT: f32 = PI as f32 * 2.0 * 8.0;
 
 const SIMULATE_LIDAR: bool = false;
-const SIMULATE_SWIPING_FRONT_SENSOR: bool = false;
+const SIMULATE_SWIPING_FRONT_SENSOR: bool = true;
 
 const PROXIMITY_SENSOR_NOISE_MIN_CM: f32 = -2.0;
 const PROXIMITY_SENSOR_NOISE_MAX_CM: f32 =  2.0;
@@ -476,8 +476,8 @@ impl Robot {
             ]
         } else if SIMULATE_SWIPING_FRONT_SENSOR {
             [
-                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 90.0 - 45.0,
-                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 90.0 + 45.0,
+                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 55.0 - 35.0,
+                (tick_count as f32 / UPS as f32 * PI as f32 * 4.0).sin() * 55.0 + 35.0,
                 //180.0,
                 1000.0, // Disabled
                 1000.0, // Disabled
