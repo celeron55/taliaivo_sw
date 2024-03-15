@@ -6,7 +6,6 @@ use micromath::F32Ext; // f32.sin and f32.cos
 use core::cmp::Ordering;
 #[allow(unused_imports)]
 use log::{info, warn};
-use fixedstr::str_format;
 
 pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 200.0; // Map width in cm
@@ -659,6 +658,7 @@ impl Map {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fixedstr::str_format;
 
     // NOTE: Run using "cargo test -- --test-threads=1" or "cargo test <test
     //       name>" to see the console output properly

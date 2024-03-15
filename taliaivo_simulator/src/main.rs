@@ -9,8 +9,8 @@ use taliaivo_common::map::HoughLine;
 use rand::distributions::{Distribution, Uniform};
 use std::fs::File;
 use std::io::{self, BufRead};
-use std::path::Path;
-use log::{Record, Metadata, Log, info, warn};
+#[allow(unused_imports)]
+use log::{info, warn};
 
 mod cli;
 use cli::Cli;
@@ -93,7 +93,7 @@ impl SensorLogReader {
             self.next_i += 1;
             values
         } else {
-            let mut values: [f32; SENSOR_LOG_NUM_VALUES] = [0.0; SENSOR_LOG_NUM_VALUES];
+            let values: [f32; SENSOR_LOG_NUM_VALUES] = [0.0; SENSOR_LOG_NUM_VALUES];
             values
         }
     }
