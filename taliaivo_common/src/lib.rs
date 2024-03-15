@@ -20,9 +20,9 @@ pub enum SensorType {
     Lidar,
     Swiping,
 }
-//pub const SENSOR_TYPE: SensorType = SensorType::Static6;
+pub const SENSOR_TYPE: SensorType = SensorType::Static6;
 //pub const SENSOR_TYPE: SensorType = SensorType::Lidar;
-pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
+//pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
 
 pub enum AlgorithmType {
     Mapper,
@@ -392,6 +392,8 @@ impl BrainState {
 
         let (mut wanted_linear_speed, mut wanted_rotation_speed) = match ALGORITHM_TYPE {
         AlgorithmType::RotationInPlace => {
+            robot.report_map(&self.map, self.pos, self.rot, None, None,
+                    None, &self.wall_lines);
             if (self.counter % (UPS as u64 * 4)) < UPS as u64 * 2 {
                 (0.0, SCANNING_ROTATION_SPEED)
             } else {

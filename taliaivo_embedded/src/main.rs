@@ -71,6 +71,15 @@ const SERVO_TIMEOUT_S: f32 = 1.0;
 const MAX_SENSOR_DISTANCE_CM: f32 = 60.0;
 const MIN_SENSOR_DISTANCE_CM: f32 = 5.5;
 
+// NOTE: The algorithm currently assumes sensors to be in this
+//       exact order
+const PROXIMITY_SENSOR_COUNT: usize = 6;
+const PROXIMITY_SENSOR_ANGLES: [f32; PROXIMITY_SENSOR_COUNT] =
+        [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+const PROXIMITY_SENSOR_ADCS: [usize; PROXIMITY_SENSOR_COUNT] =
+        //[2, 3, 1, 4, 0, 5];
+        [2, 2, 2, 4, 0, 5]; // Disable -45 and +45
+
 struct Robot {
     wheel_speed_left: f32,
     wheel_speed_right: f32,
@@ -643,14 +652,9 @@ mod app {
 
                 // Convert proximity sensor readings
                 robot.proximity_sensor_readings.clear();
-                // NOTE: The algorithm currently assumes sensors to be in this
-                //       exact order
-                let proximity_sensor_angles =
-                        [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
-                let adc_indexes = [2, 3, 1, 4, 0, 5];
-                for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
+                for (i, angle_deg) in PROXIMITY_SENSOR_ANGLES.iter().enumerate() {
                     let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
-                    let raw = adc_result[adc_indexes[i]];
+                    let raw = adc_result[PROXIMITY_SENSOR_ADCS[i]];
                     let (distance_cm, detected) = {
                         if raw < (15000.0 / MAX_SENSOR_DISTANCE_CM) as u16 {
                             (MAX_SENSOR_DISTANCE_CM + 1.0, false)

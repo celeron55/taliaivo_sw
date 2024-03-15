@@ -36,6 +36,10 @@ const GYRO_SENSOR_ABSOLUTE_ERROR: f32 = PI as f32 * 0.01;
 const GYRO_SENSOR_ABSOLUTE_ERROR_WITH_POLARITY: f32 = PI as f32 * 0.01;
 const GYRO_SENSOR_ABSOLUTE_ERROR_POLARITY_INTERVAL: u64 = UPS * 2;
 
+const PROXIMITY_SENSOR_COUNT: usize = 6;
+const PROXIMITY_SENSOR_ANGLES: [f32; PROXIMITY_SENSOR_COUNT] =
+        [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
+
 const GROUP_ARENA:         u32 = 0b00001000;
 const GROUP_ROBOT0_BODY:   u32 = 0b00000001;
 const GROUP_ROBOT1_BODY:   u32 = 0b00000010;
@@ -1004,11 +1008,7 @@ fn main() {
                     robot.proximity_sensor_readings.clear();
                     // NOTE: The algorithm currently assumes sensors to be in this
                     //       exact order
-                    let proximity_sensor_angles =
-                            [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
-                    // TODO: What is this for?
-                    //let adc_indexes = [2, 3, 1, 4, 0, 5];
-                    for (i, angle_deg) in proximity_sensor_angles.iter().enumerate() {
+                    for (i, angle_deg) in PROXIMITY_SENSOR_ANGLES.iter().enumerate() {
                         let angle_rad: f32 = angle_deg / 180.0 * PI as f32;
                         let (distance_cm, detected) = {
                             if sensors[i] > REPLAY_MAX_SENSOR_DISTANCE_CM {
