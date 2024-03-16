@@ -65,6 +65,7 @@ const LOG_SENSORS_BY_DEFAULT: bool = false;
 const MAX_PWM: f32 = 0.40;
 
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
+const NO_BATTERY_BATTERY_VOLTAGE: f32 = 5.0;
 const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
 const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
 const SERVO_TIMEOUT_S: f32 = 1.0;
@@ -766,7 +767,10 @@ mod app {
             let vbat_lowpass = cx.shared.vbat_lowpass.lock(|v|{ *v });
             let drive_mode = cx.shared.drive_mode.lock(|v| { *v });
             if drive_mode == DriveMode::Normal {
-                if vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
+                if vbat_lowpass < NO_BATTERY_BATTERY_VOLTAGE {
+                    cx.local.led_pin.set_high();
+                    Systick::delay(100.millis()).await;
+                } else if vbat_lowpass < MOTOR_CUTOFF_BATTERY_VOLTAGE {
                     cx.local.led_pin.set_high();
                     Systick::delay(100.millis()).await;
                     cx.local.led_pin.set_low();
