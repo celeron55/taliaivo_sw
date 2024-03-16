@@ -25,9 +25,9 @@ pub const SENSOR_TYPE: SensorType = SensorType::Static6;
 //pub const SENSOR_TYPE: SensorType = SensorType::Swiping;
 
 pub enum AlgorithmType {
-    Mapper,
-    Simple,
-    RotationInPlace,
+    Mapper, // The real deal
+    Simple, // Pretty much useless; cannot distinguish walls and opponents
+    RotationInPlace, // For controlled sensor testing
 }
 pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Simple;
