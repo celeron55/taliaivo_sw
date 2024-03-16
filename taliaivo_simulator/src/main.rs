@@ -917,32 +917,38 @@ fn main() {
             window.draw_2d(&e, |c, g, _| {
                 clear([0.1; 4], g);
 
-                let transform = c.transform
-                    .zoom(4.0)
-                    .trans(0.0, 0.0);
-                    //.rot_rad(PI)
-                    //.trans(-200.0, -200.0);
+                {
+                    let transform = c.transform
+                        .zoom((c.viewport.unwrap().window_size[0] / 2.0).min(c.viewport.unwrap().window_size[1]) / 150.0)
+                        .trans(0.0, 0.0);
+                        //.rot_rad(PI)
+                        //.trans(-200.0, -200.0);
 
-                // Draw robots and walls
-                for robot in &robots {
-                    robot.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+                    // Draw robots and walls
+                    for robot in &robots {
+                        robot.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+                    }
+
+                    for wall in &arena_walls {
+                        wall.draw(&rigid_body_set, &collider_set, &c, g, &transform);
+                    }
+
+                    // Draw origin dot
+                    rectangle([0.8, 0.8, 0.8, 1.0],
+                              [0.0, 0.0, 5.0, 5.0],
+                              transform
+                                .trans(10.0, 7.0)
+                                .rot_rad(PI * 0.25),
+                              g);
                 }
 
-                for wall in &arena_walls {
-                    wall.draw(&rigid_body_set, &collider_set, &c, g, &transform);
-                }
-
-                // Draw origin dot
-                rectangle([0.8, 0.8, 0.8, 1.0], 
-                          [0.0, 0.0, 5.0, 5.0],
-                          transform
-                            .trans(10.0, 7.0)
-                            .rot_rad(PI * 0.25),
-                          g);
-
-                let transform1 = transform.trans(180.0, 10.0);
-                robots[0].draw_map(&c, g, &transform1,
-                        88.0 / taliaivo_common::map::MAP_W as f64);
+                let transform1 = c.transform.trans(
+                        c.viewport.unwrap().window_size[0] / 2.0 + 40.0, 40.0);
+                let tile_size = (((c.viewport.unwrap().window_size[0] / 2.0) - 80.0
+                        ) / taliaivo_common::map::MAP_W as f64).min(
+                            (c.viewport.unwrap().window_size[1] - 80.0) /
+                                taliaivo_common::map::MAP_W as f64);
+                robots[0].draw_map(&c, g, &transform1, tile_size);
                 //let transform2 = transform1.trans(0.0, 100.0);
                 //robots[1].draw_map(&c, g, &transform2, 0.75);
 
