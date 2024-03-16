@@ -77,7 +77,7 @@ const PROXIMITY_SENSOR_COUNT: usize = 6;
 const PROXIMITY_SENSOR_ANGLES: [f32; PROXIMITY_SENSOR_COUNT] =
         [0.0, -45.0, 45.0, -90.0, 90.0, 180.0];
 const PROXIMITY_SENSOR_ADCS: [usize; PROXIMITY_SENSOR_COUNT] =
-        //[2, 3, 1, 4, 0, 5];
+        //[2, 3, 1, 4, 0, 5]; // TODO: Change back to this, enabling -45 and +45
         [2, 2, 2, 4, 0, 5]; // Disable -45 and +45
 
 const SERVO_DUTY_CLOCKS_MIN: u16 = 27800;
