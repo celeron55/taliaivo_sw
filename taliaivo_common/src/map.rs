@@ -7,7 +7,7 @@ use core::cmp::Ordering;
 #[allow(unused_imports)]
 use log::{info, warn};
 
-pub const MAP_T: f32 = 5.0; // Map tile width and height in cm
+pub const MAP_T: f32 = 3.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 170.0; // Map width in cm
 pub const MAP_H_REAL: f32 = MAP_W_REAL;
 pub const MAP_W: u32 = (MAP_W_REAL / MAP_T) as u32; // Map width in tiles
@@ -79,7 +79,7 @@ impl Map {
         loop {
             // Paint the current tile
             if let Some(tile) = self.data.get_mut((y0 as u32 * self.width + x0 as u32) as usize) {
-                *tile = -100.0; // Mark as unoccupied
+                *tile = (*tile - 20.0).clamp(-100.0, 300.0); // Mark as unoccupied
             }
 
             if x0 == x1 && y0 == y1 { break; }
@@ -98,7 +98,7 @@ impl Map {
                 if *tile < occupation_event_max_starting_value {
                     newly_occupied = Some(Point2::new(x, y));
                 }
-                *tile = 100.0; // Mark as occupied
+                *tile = (*tile + 60.0).clamp(-100.0, 300.0); // Mark as occupied
             }
         }
 
