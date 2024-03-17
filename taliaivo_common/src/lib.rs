@@ -762,7 +762,7 @@ impl BrainState {
                 // set threshold, we don't want to investigate the point as it
                 // would be unsafe
                 let d_point_to_wall = line.distance(point_tile);
-                if d_point_to_wall < 4.0 - AGGRESSIVENESS * 2.0 {
+                if d_point_to_wall < 3.0 - AGGRESSIVENESS * 1.5 {
                     return false;
                 }
                 // If the distance from the robot to the wall is smaller than
