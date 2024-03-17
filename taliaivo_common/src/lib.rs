@@ -34,8 +34,7 @@ pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::RotationInPlace;
 
 const ENEMY_HISTORY_LENGTH: usize = 50;
-//const MAPPER_FORGET_RATE: f32 = 0.004 * (125.0 / ARENA_DIMENSION);
-const MAPPER_FORGET_RATE: f32 = 0.010 * (125.0 / ARENA_DIMENSION);
+const MAPPER_FORGET_RATE: f32 = 0.006 * (125.0 / ARENA_DIMENSION);
 
 // Arena configuration
 // TODO: Remember to adjust this for the target arena
