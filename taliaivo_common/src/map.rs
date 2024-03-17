@@ -15,12 +15,12 @@ pub const MAP_H: u32 = MAP_W;
 pub const MAP_SIZE: usize = (MAP_W * MAP_H) as usize;
 
 // Hough parameters
-const DISTANCE_STEP: usize = 2; // Distance resolution (tiles)
+const DISTANCE_STEP: usize = 3; // Distance resolution (tiles)
 const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
-const HOUGH_THRESHOLD: usize = (50.0 / MAP_T) as usize;
+const HOUGH_THRESHOLD: usize = (40.0 / MAP_T) as usize;
 const KEEP_NUM_TOP_LINES: usize = 5;
 pub const MAX_NUM_LINE_CANDIDATES: usize = 20;
-const EDGE_MIN_POS: f32 = 50.0;
+const EDGE_MIN_POS: f32 = 40.0;
 const EDGE_MAX_NEG: f32 = -5.0;
 const MAX_DISTANCE: i32 = MAP_W as i32;
 const NUM_DISTANCES: usize = MAX_DISTANCE as usize / DISTANCE_STEP;
