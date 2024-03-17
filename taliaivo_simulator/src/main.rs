@@ -956,7 +956,9 @@ fn main() {
                     // Draw replay progress bar
                     let progress = reader.next_i as f64 / reader.value_lines.len() as f64;
                     rectangle([0.8, 0.8, 0.8, 1.0], // Color
-                              [0.0, 0.0, 1200.0 * progress, 10.0], // Dimensions
+                              [0.0, 0.0,
+                                c.viewport.unwrap().window_size[0] * progress,
+                                10.0], // Dimensions
                               c.transform,
                               g);
                 }
