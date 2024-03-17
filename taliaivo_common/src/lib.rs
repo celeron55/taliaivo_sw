@@ -272,7 +272,7 @@ impl BrainState {
             seed: seed,
             counter: 0,
             map: Map::new(),
-            pos: Point2::new(100.0, 100.0),
+            pos: Point2::new(MAP_W as f32 / 2.0, MAP_H as f32 / 2.0),
             rot: 0.0,
             vel: Vector2::new(0.0, 0.0),
             applied_wheel_speed_left: 0.0,
