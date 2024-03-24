@@ -17,7 +17,7 @@ pub const MAP_H: u32 = MAP_W;
 pub const MAP_SIZE: usize = (MAP_W * MAP_H) as usize;
 
 // Hough parameters
-const DISTANCE_STEP: usize = 3; // Distance resolution (tiles)
+const DISTANCE_STEP: usize = 2; // Distance resolution (tiles)
 const ANGLE_STEP: usize = 10; // Angle resolution (degrees)
 const HOUGH_THRESHOLD: usize = (40.0 / MAP_T) as usize;
 const KEEP_NUM_TOP_LINES: usize = 5;
@@ -81,7 +81,7 @@ impl Map {
         loop {
             // Paint the current tile
             if let Some(tile) = self.data.get_mut((y0 as u32 * self.width + x0 as u32) as usize) {
-                *tile = (*tile - 20.0).clamp(-100.0, 300.0); // Mark as unoccupied
+                *tile = (*tile - 30.0).clamp(-100.0, 300.0); // Mark as unoccupied
             }
 
             if x0 == x1 && y0 == y1 { break; }
@@ -100,7 +100,7 @@ impl Map {
                 if *tile < occupation_event_max_starting_value {
                     newly_occupied = Some(Point2::new(x, y));
                 }
-                *tile = (*tile + 60.0).clamp(-100.0, 300.0); // Mark as occupied
+                *tile = (*tile + 80.0).clamp(-100.0, 300.0); // Mark as occupied
             }
         }
 
