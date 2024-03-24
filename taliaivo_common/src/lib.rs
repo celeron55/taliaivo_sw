@@ -8,12 +8,19 @@ use arrayvec::ArrayVec;
 use nalgebra::{Vector2, Point2, Rotation2};
 use core::f32::consts::PI;
 use ringbuffer::{ConstGenericRingBuffer, RingBuffer};
+#[allow(unused_imports)]
 use micromath::F32Ext; // f32.sin and f32.cos
 #[allow(unused_imports)]
 use log::{info, warn};
 pub use map::*;
 
 pub const UPS: u32 = 50; // Updates per second
+pub const REPLAY_LOG_LINE_NUM_VALUES: usize = 10;
+
+pub const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
+pub const MAX_SENSOR_DISTANCE_CM: f32 = 60.0;
+pub const MIN_SENSOR_DISTANCE_CM: f32 = 5.5;
+pub const REPLAY_NONDETECT_SENSOR_DISTANCE_CM: f32 = 99.0;
 
 pub enum SensorType {
     Static6,
@@ -101,6 +108,7 @@ pub trait RobotInterface {
     fn get_proximity_sensors(&self) -> ArrayVec<(f32, f32, bool), 6>; // Returns a list of (angle (radians), distance (cm), something_seen) tuples for each sensor
     fn get_gyroscope_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
     fn get_accelerometer_reading(&self) -> (f32, f32, f32); // X, Y, Z axis values
+    fn get_battery_voltage(&self) -> f32;
     fn get_battery_min_cell_voltage(&self) -> f32;
 
     // LED control
@@ -112,6 +120,8 @@ pub trait RobotInterface {
             scan_p: Option<Point2<f32>>,
             wall_avoid_p: Option<Point2<f32>>,
             wall_lines: &[HoughLine]);
+
+    fn log_replay_frame(&mut self, values: &[f32; REPLAY_LOG_LINE_NUM_VALUES]);
 }
 
 pub trait BrainInterface {
@@ -676,6 +686,23 @@ impl BrainState {
             weapon_throttle = 0.0;
         }*/
         robot.set_weapon_throttle(weapon_throttle);
+
+        // Replay logging
+        {
+            let mut values: [f32; REPLAY_LOG_LINE_NUM_VALUES] = [0.0; REPLAY_LOG_LINE_NUM_VALUES];
+            for i in 0..self.proximity_sensor_readings.len().min(6) {
+                values[i] = if self.proximity_sensor_readings[i].2 {
+                    self.proximity_sensor_readings[i].1
+                } else {
+                    REPLAY_NONDETECT_SENSOR_DISTANCE_CM
+                };
+            }
+            values[6] = gyro_z;
+            values[7] = self.applied_wheel_speed_left;
+            values[8] = self.applied_wheel_speed_right;
+            values[9] = robot.get_battery_voltage();
+            robot.log_replay_frame(&values);
+        }
 
         self.counter += 1;
     }

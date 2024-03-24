@@ -2,6 +2,7 @@ extern crate arrayvec; // Use static arrays like the embedded code
 
 use arrayvec::{ArrayVec, ArrayString};
 use nalgebra::{Vector2, Point2};
+#[allow(unused_imports)]
 use micromath::F32Ext; // f32.sin and f32.cos
 use core::cmp::Ordering;
 #[allow(unused_imports)]

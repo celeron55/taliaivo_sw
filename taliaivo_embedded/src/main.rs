@@ -55,7 +55,17 @@ use core::f64::consts::PI;
 //use defmt::{panic, *};
 //use {defmt_rtt as _, panic_probe as _};
 
-use taliaivo_common::{RobotInterface, BrainState, Map, BrainInterface, NUM_SERVO_INPUTS};
+use taliaivo_common::{
+    RobotInterface,
+    BrainState,
+    Map,
+    BrainInterface,
+    NUM_SERVO_INPUTS,
+    REPLAY_LOG_LINE_NUM_VALUES,
+    SENSOR_MOUNT_RADIUS_CM,
+    MAX_SENSOR_DISTANCE_CM,
+    MIN_SENSOR_DISTANCE_CM,
+};
 use taliaivo_common::map::HoughLine;
 
 mod command_accumulator;
@@ -67,10 +77,7 @@ const MAX_PWM: f32 = 0.40;
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
 const NO_BATTERY_BATTERY_VOLTAGE: f32 = 5.0;
 const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
-const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
 const SERVO_TIMEOUT_S: f32 = 1.0;
-const MAX_SENSOR_DISTANCE_CM: f32 = 60.0;
-const MIN_SENSOR_DISTANCE_CM: f32 = 5.5;
 
 // NOTE: The algorithm currently assumes sensors to be in this
 //       exact order
@@ -92,6 +99,7 @@ struct Robot {
     gyro: Vector3<f32>,
     battery_voltage: f32,
     servo_in1: f32,
+    replay_log_enabled: bool,
 }
 
 impl Robot {
@@ -104,6 +112,7 @@ impl Robot {
             gyro: Vector3::new(0.0, 0.0, 0.0),
             battery_voltage: 0.0,
             servo_in1: 0.0,
+            replay_log_enabled: false,
         }
     }
 }
@@ -152,6 +161,11 @@ impl RobotInterface for Robot {
         // TODO: Check polarity and scaling of each axis
         return (self.acc.x, self.acc.y, self.acc.z);
     }
+
+    // Battery voltage
+    fn get_battery_voltage(&self) -> f32 {
+        return self.battery_voltage;
+    }
     // Voltages of individual cells
     fn get_battery_min_cell_voltage(&self) -> f32 {
         return self.battery_voltage / 3.0; // 3S
@@ -169,6 +183,14 @@ impl RobotInterface for Robot {
             wall_avoid_p: Option<Point2<f32>>,
             wall_lines: &[HoughLine]) {
         // TODO: Pass somewhere: USB, wireless link or SD card?
+    }
+
+    fn log_replay_frame(&mut self, values: &[f32; REPLAY_LOG_LINE_NUM_VALUES]) {
+        info!("S,{:.0},{:.0},{:.0},{:.0},{:.0},{:.0},{:.1},{:.0},{:.0},{:.1}",
+                values[0], values[1], values[2],
+                values[3], values[4], values[5],
+                values[6], values[7], values[8],
+                values[9]);
     }
 }
 
@@ -684,27 +706,7 @@ mod app {
                 robot.gyro = Vector3::new(gyro.x, gyro.y, gyro.z);
             }
 
-            let log_sensors = cx.shared.log_sensors.lock(|v|{ *v });
-            if log_sensors {
-                let mut values: [f32; 10] = [0.0; 10];
-                if robot.proximity_sensor_readings.len() >= 6 {
-                    values[0] = robot.proximity_sensor_readings[0].1;
-                    values[1] = robot.proximity_sensor_readings[1].1;
-                    values[2] = robot.proximity_sensor_readings[2].1;
-                    values[3] = robot.proximity_sensor_readings[3].1;
-                    values[4] = robot.proximity_sensor_readings[4].1;
-                    values[5] = robot.proximity_sensor_readings[5].1;
-                }
-                values[6] = robot.gyro.z;
-                values[7] = robot.wheel_speed_left;
-                values[8] = robot.wheel_speed_right;
-                values[9] = vbat;
-                info!("S,{:.0},{:.0},{:.0},{:.0},{:.0},{:.0},{:.1},{:.0},{:.0},{:.1}",
-                        values[0], values[1], values[2],
-                        values[3], values[4], values[5],
-                        values[6], values[7], values[8],
-                        values[9]);
-            }
+            robot.replay_log_enabled = cx.shared.log_sensors.lock(|v|{ *v });
 
             brain.update(&mut robot);
 
