@@ -7,7 +7,8 @@ use core::cmp::Ordering;
 #[allow(unused_imports)]
 use log::{info, warn};
 
-pub const MAP_T: f32 = 3.0; // Map tile width and height in cm
+// MAP_T=3.0 causes too much load, MAP_T=4.0 works fine
+pub const MAP_T: f32 = 4.0; // Map tile width and height in cm
 pub const MAP_W_REAL: f32 = 170.0; // Map width in cm
 pub const MAP_H_REAL: f32 = MAP_W_REAL;
 pub const MAP_W: u32 = (MAP_W_REAL / MAP_T) as u32; // Map width in tiles
