@@ -43,7 +43,7 @@ pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::ForwardsAndBack;
 
 const ENEMY_HISTORY_LENGTH: usize = 50;
-const MAPPER_FORGET_RATE: f32 = 0.006 * (125.0 / ARENA_DIMENSION);
+const MAPPER_FORGET_RATE: f32 = 0.003 * (125.0 / ARENA_DIMENSION);
 
 // Arena configuration
 // TODO: Remember to adjust this for the target arena
@@ -66,9 +66,9 @@ pub const MAX_ACCELERATION: f32 = 500.0;
 //const WALL_AVOID_DISTANCE_ANY_DIRECTION: f32 = 15.0;
 //const WALL_AVOID_DISTANCE_HEAD_ON: f32 = 40.0;
 const AGGRESSIVENESS: f32 = 0.0; // roughly -1.0...1.0, 0.0 = normal aggressiveness
-const MAX_LINEAR_SPEED: f32 = 40.0;
+const MAX_LINEAR_SPEED: f32 = 20.0;
 const MAX_ROTATION_SPEED: f32 = PI * 3.0;
-const ATTACK_LINEAR_SPEED: f32 = 70.0;
+const ATTACK_LINEAR_SPEED: f32 = 35.0;
 const ATTACK_ROTATION_SPEED: f32 = PI * 3.0;
 const SCANNING_ROTATION_SPEED: f32 = match SENSOR_TYPE {
     SensorType::Static6 => MAX_ROTATION_SPEED * 1.0,
@@ -883,7 +883,7 @@ impl BrainState {
                 wanted_linear_speed = max_linear_speed * 0.05;
             }
             // Apply motor speed modulation to get scanning data
-            wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
+            //wanted_rotation_speed += (self.counter as f32 / UPS as f32 * SCANNING_FREQUENCY).sin() * SCANNING_ROTATION_SPEED;
             return (wanted_linear_speed, wanted_rotation_speed);
         }
 
