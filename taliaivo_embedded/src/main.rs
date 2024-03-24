@@ -742,13 +742,18 @@ mod app {
                 // -> Conversion factor from cm/s to PWM is 1.0/194 = 0.00515
                 //    * This is boosted by a bit to overcome friction
                 let mut cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
-                if cm_per_s_to_pwm < -0.1 {
-                    cm_per_s_to_pwm -= FRICTION_COMPENSATION_PWM;
-                } else if cm_per_s_to_pwm > 0.1 {
-                    cm_per_s_to_pwm += FRICTION_COMPENSATION_PWM;
+                let mut motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
+                let mut motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
+                if motor_pwm_left < -0.001 {
+                    motor_pwm_left -= FRICTION_COMPENSATION_PWM;
+                } else if motor_pwm_left > 0.001 {
+                    motor_pwm_left += FRICTION_COMPENSATION_PWM;
                 }
-                let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
-                let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
+                if motor_pwm_right < -0.001 {
+                    motor_pwm_right -= FRICTION_COMPENSATION_PWM;
+                } else if motor_pwm_right > 0.001 {
+                    motor_pwm_right += FRICTION_COMPENSATION_PWM;
+                }
                 set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);
             } else {
                 set_motor_speeds(0.0, 0.0, cx.local.motor_pwm);
