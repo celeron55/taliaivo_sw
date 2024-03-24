@@ -72,9 +72,10 @@ mod command_accumulator;
 use command_accumulator::CommandAccumulator;
 
 const LOG_SENSORS_BY_DEFAULT: bool = false;
-const MAX_PWM: f32 = 0.40;
+const MAX_PWM: f32 = 0.50;
 
-const FRICTION_COMPENSATION_FACTOR: f32 = 1.2;
+const FRICTION_COMPENSATION_FACTOR: f32 = 1.4;
+const FRICTION_COMPENSATION_PWM: f32 = 0.1; // Minimum PWM to make the wheels turn
 const NO_BATTERY_BATTERY_VOLTAGE: f32 = 5.0;
 const MOTOR_CUTOFF_BATTERY_VOLTAGE: f32 = 9.6;
 const SERVO_TIMEOUT_S: f32 = 1.0;
@@ -740,7 +741,12 @@ mod app {
                 // -> Wheel speed is 514/60*pi*2*3.6 = 194cm/s @ 100% PWM
                 // -> Conversion factor from cm/s to PWM is 1.0/194 = 0.00515
                 //    * This is boosted by a bit to overcome friction
-                let cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
+                let mut cm_per_s_to_pwm = 1.0 / 194.0 * FRICTION_COMPENSATION_FACTOR;
+                if cm_per_s_to_pwm < -0.1 {
+                    cm_per_s_to_pwm -= FRICTION_COMPENSATION_PWM;
+                } else if cm_per_s_to_pwm > 0.1 {
+                    cm_per_s_to_pwm += FRICTION_COMPENSATION_PWM;
+                }
                 let motor_pwm_left = robot.wheel_speed_left * cm_per_s_to_pwm;
                 let motor_pwm_right = robot.wheel_speed_right * cm_per_s_to_pwm;
                 set_motor_speeds(motor_pwm_left, motor_pwm_right, cx.local.motor_pwm);

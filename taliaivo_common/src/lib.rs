@@ -35,10 +35,12 @@ pub enum AlgorithmType {
     Mapper, // The real deal
     Simple, // Pretty much useless; cannot distinguish walls and opponents
     RotationInPlace, // For controlled sensor testing
+    ForwardsAndBack, // For drive speed calibration
 }
 pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Simple;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::RotationInPlace;
+//pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::ForwardsAndBack;
 
 const ENEMY_HISTORY_LENGTH: usize = 50;
 const MAPPER_FORGET_RATE: f32 = 0.006 * (125.0 / ARENA_DIMENSION);
@@ -331,6 +333,8 @@ impl BrainState {
             }
             AlgorithmType::RotationInPlace => {
             }
+            AlgorithmType::ForwardsAndBack => {
+            }
         };
 
         let servo_inputs = robot.get_rc_input_values();
@@ -410,6 +414,37 @@ impl BrainState {
                 (0.0, SCANNING_ROTATION_SPEED)
             } else {
                 (0.0, -SCANNING_ROTATION_SPEED)
+            }
+        },
+        AlgorithmType::ForwardsAndBack => {
+            robot.report_map(&self.map, self.pos, self.rot, None, None,
+                    None, &self.wall_lines);
+            let cycle_speeds = [
+                MAX_LINEAR_SPEED * 0.333,
+                MAX_LINEAR_SPEED * 0.667,
+                MAX_LINEAR_SPEED * 1.0,
+            ];
+            let distance = 30.0;
+            let cycle_time = (distance / cycle_speeds[0] * UPS as f32 * 2.0) as u64;
+            let num_cycles = cycle_speeds.len() as u64;
+            let cycle_i = ((self.counter % (num_cycles * cycle_time)) / cycle_time) as usize;
+            let speed = cycle_speeds[cycle_i];
+            let cycle_first_half = (self.counter % cycle_time) > cycle_time / 2;
+            let allowed_drive_time = (distance / cycle_speeds[cycle_i] * UPS as f32) as u64;
+            if cycle_first_half == false {
+                let counter = self.counter % cycle_time;
+                if counter < allowed_drive_time {
+                    (speed, 0.0)
+                } else {
+                    (0.0, 0.0)
+                }
+            } else {
+                let counter = (self.counter % cycle_time) - cycle_time / 2;
+                if counter < allowed_drive_time {
+                    (-speed, 0.0)
+                } else {
+                    (0.0, 0.0)
+                }
             }
         },
         AlgorithmType::Simple => {

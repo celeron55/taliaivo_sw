@@ -589,6 +589,8 @@ impl Robot {
             }
             taliaivo_common::AlgorithmType::RotationInPlace => {
             }
+            taliaivo_common::AlgorithmType::ForwardsAndBack => {
+            }
         };
 
         let p = self.diagnostic_robot_p;
