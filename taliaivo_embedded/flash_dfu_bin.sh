@@ -7,4 +7,4 @@ if [ -z "$FIRMWARE_PATH" ]; then
     exit 1
 fi
 
-dfu-util -a 0 --dfuse-address 0x08000000  -D "$FIRMWARE_PATH"
+dfu-util -a 0 --dfuse-address 0x08000000:leave -D "$FIRMWARE_PATH"
