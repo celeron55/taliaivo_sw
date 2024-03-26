@@ -15,12 +15,17 @@ use log::{info, warn};
 pub use map::*;
 
 pub const UPS: u32 = 50; // Updates per second
-pub const REPLAY_LOG_LINE_NUM_VALUES: usize = 10;
+
+pub const REPLAY_LOG_LINE_NUM_VALUES: usize = 16;
+pub const REPLAY_NONDETECT_SENSOR_DISTANCE_CM: f32 = 99.0;
+pub const REPLAY_TARGET_TYPE_NONE: f32 = 0.0;
+pub const REPLAY_TARGET_TYPE_ATTACK: f32 = 1.0;
+pub const REPLAY_TARGET_TYPE_SCAN: f32 = 2.0;
+pub const REPLAY_TARGET_TYPE_WALL_AVOID: f32 = 3.0;
 
 pub const SENSOR_MOUNT_RADIUS_CM: f32 = 4.0;
 pub const MAX_SENSOR_DISTANCE_CM: f32 = 60.0;
 pub const MIN_SENSOR_DISTANCE_CM: f32 = 5.5;
-pub const REPLAY_NONDETECT_SENSOR_DISTANCE_CM: f32 = 99.0;
 
 pub enum SensorType {
     Static6,
@@ -724,6 +729,18 @@ impl BrainState {
 
         // Replay logging
         {
+            let (target_type_f, target_p) = {
+                if let Some(p) = self.attack_p {
+                    (REPLAY_TARGET_TYPE_ATTACK, p)
+                } else if let Some(p) = self.scan_p {
+                    (REPLAY_TARGET_TYPE_SCAN, p)
+                } else if let Some(p) = self.wall_avoid_p {
+                    (REPLAY_TARGET_TYPE_WALL_AVOID, p)
+                } else {
+                    (REPLAY_TARGET_TYPE_NONE, Point2::new(0.0, 0.0))
+                }
+            };
+
             let mut values: [f32; REPLAY_LOG_LINE_NUM_VALUES] = [0.0; REPLAY_LOG_LINE_NUM_VALUES];
             for i in 0..self.proximity_sensor_readings.len().min(6) {
                 values[i] = if self.proximity_sensor_readings[i].2 {
@@ -736,6 +753,12 @@ impl BrainState {
             values[7] = self.applied_wheel_speed_left;
             values[8] = self.applied_wheel_speed_right;
             values[9] = robot.get_battery_voltage();
+            values[10] = self.pos.x;
+            values[11] = self.pos.y;
+            values[12] = self.rot;
+            values[13] = target_type_f;
+            values[14] = target_p.x;
+            values[15] = target_p.y;
             robot.log_replay_frame(&values);
         }
 
