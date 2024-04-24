@@ -41,11 +41,13 @@ pub enum AlgorithmType {
     Simple, // Pretty much useless; cannot distinguish walls and opponents
     RotationInPlace, // For controlled sensor testing
     ForwardsAndBack, // For drive speed calibration
+    DirectControl, // Direct motor control via servo inputs
 }
-pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
+//pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Mapper;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::Simple;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::RotationInPlace;
 //pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::ForwardsAndBack;
+pub const ALGORITHM_TYPE: AlgorithmType = AlgorithmType::DirectControl;
 
 const ENEMY_HISTORY_LENGTH: usize = 50;
 const MAPPER_FORGET_RATE: f32 = 0.003 * (125.0 / ARENA_DIMENSION);
@@ -340,6 +342,8 @@ impl BrainState {
             }
             AlgorithmType::ForwardsAndBack => {
             }
+            AlgorithmType::DirectControl => {
+            }
         };
 
         let servo_inputs = robot.get_rc_input_values();
@@ -412,6 +416,25 @@ impl BrainState {
         //info!("proximity_sensor_readings: {:?}", self.proximity_sensor_readings);
 
         let (mut wanted_linear_speed, mut wanted_rotation_speed) = match ALGORITHM_TYPE {
+        AlgorithmType::DirectControl => {
+            let linear = if servo_inputs[0] <= -0.2 {
+                0.0
+            } else {
+                if servo_inputs[0] > 0.4 && servo_inputs[0] < 0.6 {
+                    // Deadzone
+                    0.0
+                } else {
+                    // TODO: Correct magnitude
+                    (servo_inputs[0] * 2.0 - 1.0) * 100.0
+                }
+            };
+            // TODO: Turning via second servo input channel
+            //let rotation = (servo_inputs[0] * 2.0 - 1.0) * 5.0;
+            let wheel_speed_left = linear;
+            let wheel_speed_right = linear;
+            robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
+            return;
+        },
         AlgorithmType::RotationInPlace => {
             robot.report_map(&self.map, self.pos, self.rot, None, None,
                     None, &self.wall_lines);

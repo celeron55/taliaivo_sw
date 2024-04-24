@@ -72,7 +72,8 @@ mod command_accumulator;
 use command_accumulator::CommandAccumulator;
 
 const LOG_SENSORS_BY_DEFAULT: bool = false;
-const MAX_PWM: f32 = 0.50;
+//const MAX_PWM: f32 = 0.50; // TODO: For use with wheels
+const MAX_PWM: f32 = 1.0; // TODO: For use with legs
 
 const FRICTION_COMPENSATION_FACTOR: f32 = 1.4;
 const FRICTION_COMPENSATION_PWM: f32 = 0.1; // Minimum PWM to make the wheels turn
@@ -658,7 +659,7 @@ mod app {
                         (duty_clocks as f32 - SERVO_DUTY_CLOCKS_MIN as f32) /
                             (SERVO_DUTY_CLOCKS_MAX - SERVO_DUTY_CLOCKS_MIN) as f32
                     } else {
-                        0.0
+                        -0.5
                     }
                 }
             });
