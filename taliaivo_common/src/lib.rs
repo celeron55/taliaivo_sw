@@ -282,6 +282,8 @@ pub struct BrainState {
     enemy_detect_timestamp: Option<u64>,
     wall_position: Option<Point2<f32>>,
     wall_detect_timestamp: Option<u64>,
+    accepted_servo_inputs: [f32; NUM_SERVO_INPUTS],
+    servo_inputs_large_change_counters: [usize; NUM_SERVO_INPUTS],
 }
 
 impl BrainState {
@@ -313,6 +315,8 @@ impl BrainState {
             enemy_detect_timestamp: None,
             wall_position: None,
             wall_detect_timestamp: None,
+            accepted_servo_inputs: [-0.5; NUM_SERVO_INPUTS],
+            servo_inputs_large_change_counters: [0; NUM_SERVO_INPUTS],
         }
     }
 
@@ -347,6 +351,21 @@ impl BrainState {
         };
 
         let servo_inputs = robot.get_rc_input_values();
+
+        // Filter inputs into self.accepted_servo_inputs with additional state
+        // in self.servo_inputs_large_change_counters
+        for i in 0..NUM_SERVO_INPUTS {
+            let max_change: f32 = 0.2;
+            if (servo_inputs[i] > self.accepted_servo_inputs[i] - max_change &&
+                    servo_inputs[i] < self.accepted_servo_inputs[i] + max_change) ||
+                    self.servo_inputs_large_change_counters[i] >= 2 {
+                self.accepted_servo_inputs[i] = servo_inputs[i];
+                self.servo_inputs_large_change_counters[i] = 0;
+            } else {
+                self.servo_inputs_large_change_counters[i] += 1;
+            }
+        }
+
         self.filtered_servo_input = servo_inputs[0] * 0.2 + self.filtered_servo_input * 0.8;
         let robot_enabled = self.filtered_servo_input > 0.5;
         //info!("servo_inputs: {:?}, robot_enabled: {:?}", servo_inputs, robot_enabled);
@@ -417,19 +436,21 @@ impl BrainState {
 
         let (mut wanted_linear_speed, mut wanted_rotation_speed) = match ALGORITHM_TYPE {
         AlgorithmType::DirectControl => {
-            let linear = if servo_inputs[0] <= -0.2 {
+            info!("accepted_servo_inputs: {:?}, servo_inputs: {:?}",
+                    self.accepted_servo_inputs, servo_inputs);
+            let linear = if self.accepted_servo_inputs[0] <= -0.2 {
                 0.0
             } else {
-                if servo_inputs[0] > 0.4 && servo_inputs[0] < 0.6 {
+                if self.accepted_servo_inputs[0] > 0.4 && self.accepted_servo_inputs[0] < 0.6 {
                     // Deadzone
                     0.0
                 } else {
                     // TODO: Correct magnitude
-                    (servo_inputs[0] * 2.0 - 1.0) * 100.0
+                    (self.accepted_servo_inputs[0] * 2.0 - 1.0) * 100.0
                 }
             };
             // TODO: Turning via second servo input channel
-            //let rotation = (servo_inputs[0] * 2.0 - 1.0) * 5.0;
+            //let rotation = (self.accepted_servo_inputs[0] * 2.0 - 1.0) * 5.0;
             let wheel_speed_left = linear;
             let wheel_speed_right = linear;
             robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
