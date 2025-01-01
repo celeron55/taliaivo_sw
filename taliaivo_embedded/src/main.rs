@@ -101,6 +101,7 @@ struct Robot {
     gyro: Vector3<f32>,
     battery_voltage: f32,
     servo_in1: f32,
+    servo_in2: f32,
     replay_log_enabled: bool,
 }
 
@@ -114,6 +115,7 @@ impl Robot {
             gyro: Vector3::new(0.0, 0.0, 0.0),
             battery_voltage: 0.0,
             servo_in1: 0.0,
+            servo_in2: 0.0,
             replay_log_enabled: false,
         }
     }
@@ -140,7 +142,7 @@ impl RobotInterface for Robot {
     // R/C Receiver Inputs
     // Returns values from all R/C receiver channels
     fn get_rc_input_values(&self) -> [f32; NUM_SERVO_INPUTS] {
-        [self.servo_in1, 0.0, 0.0]
+        [self.servo_in1, self.servo_in2, 0.0]
     }
 
     // Sensor readings
@@ -342,6 +344,7 @@ mod app {
         vbat_lowpass: f32,
         log_sensors: bool,
         servo_in1: PwmInput<pac::TIM9>,
+        servo_in2: PwmInput<pac::TIM8>,
         debug_pin: gpio::PE4<Output<PushPull>>,
     }
 
@@ -356,6 +359,8 @@ mod app {
         mpu: Mpu6050<hal::i2c::I2c<hal::pac::I2C1>>,
         servo_in1_last_period: u16,
         servo_in1_timeout_counter: u32,
+        servo_in2_last_period: u16,
+        servo_in2_timeout_counter: u32,
         adc: Adc<pac::ADC1>,
         adc1_c0: gpio::Pin<'A', 0, gpio::Analog>,
         adc1_c1: gpio::Pin<'A', 1, gpio::Analog>,
@@ -550,10 +555,13 @@ mod app {
 
         // Servo PWM timer inputs
         // SERVO_IN1 = PE5 = TIM9_CH1
-        // SERVO_IN2 = PC6 = TIM8_CH1, TIM3_CH1
         let pe5_tim9_ch1 = gpioe.pe5.into_alternate::<3>();
         let timer9 = Timer::<pac::TIM9>::new(cx.device.TIM9, &clocks);
         let servo_in1 = timer9.pwm_input(500.Hz(), pe5_tim9_ch1);
+        // SERVO_IN2 = PC6 = TIM8_CH1, (TIM3_CH1)
+        let pc6_tim8_ch1 = gpioc.pc6.into_alternate::<3>();
+        let timer8 = Timer::<pac::TIM8>::new(cx.device.TIM8, &clocks);
+        let servo_in2 = timer8.pwm_input(500.Hz(), pc6_tim8_ch1);
 
         // Schedule tasks
 
@@ -574,6 +582,7 @@ mod app {
                 vbat_lowpass: 0.0,
                 log_sensors: LOG_SENSORS_BY_DEFAULT,
                 servo_in1: servo_in1,
+                servo_in2: servo_in2,
                 debug_pin: debug_pin,
             },
             Local {
@@ -586,6 +595,8 @@ mod app {
                 mpu: mpu,
                 servo_in1_last_period: 0,
                 servo_in1_timeout_counter: 0,
+                servo_in2_last_period: 0,
+                servo_in2_timeout_counter: 0,
                 adc: adc,
                 adc1_c0: adc1_c0,
                 adc1_c1: adc1_c1,
@@ -620,12 +631,15 @@ mod app {
             vbat_lowpass,
             log_sensors,
             servo_in1,
+            servo_in2,
         ],
         local = [
             motor_pwm,
             mpu,
             servo_in1_last_period,
             servo_in1_timeout_counter,
+            servo_in2_last_period,
+            servo_in2_timeout_counter,
         ]
     )]
     async fn algorithm_task(mut cx: algorithm_task::Context) {
@@ -655,6 +669,32 @@ mod app {
                 }
                 robot.servo_in1 = {
                     if *cx.local.servo_in1_timeout_counter <
+                            (taliaivo_common::UPS as f32 * SERVO_TIMEOUT_S) as u32 {
+                        (duty_clocks as f32 - SERVO_DUTY_CLOCKS_MIN as f32) /
+                            (SERVO_DUTY_CLOCKS_MAX - SERVO_DUTY_CLOCKS_MIN) as f32
+                    } else {
+                        -0.5
+                    }
+                }
+            });
+
+            *cx.local.servo_in2_timeout_counter += 1;
+            cx.shared.servo_in2.lock(|servo_in2| {
+                let duty_clocks = servo_in2.get_duty_cycle_clocks();
+                let period_clocks = servo_in2.get_period_clocks();
+                if servo_in2.is_valid_capture() {
+                    // When the receiver stops giving out pulses in its failsafe
+                    // mode, period_clocks stops containing noise. This is used
+                    // to detect loss of transmitter signal or a broken
+                    // receiver.
+                    //info!("Servo input 1: {:?} / {:?}", duty_clocks, period_clocks);
+                    if period_clocks != *cx.local.servo_in2_last_period {
+                        *cx.local.servo_in2_timeout_counter = 0;
+                    }
+                    *cx.local.servo_in2_last_period = period_clocks;
+                }
+                robot.servo_in2 = {
+                    if *cx.local.servo_in2_timeout_counter <
                             (taliaivo_common::UPS as f32 * SERVO_TIMEOUT_S) as u32 {
                         (duty_clocks as f32 - SERVO_DUTY_CLOCKS_MIN as f32) /
                             (SERVO_DUTY_CLOCKS_MAX - SERVO_DUTY_CLOCKS_MIN) as f32

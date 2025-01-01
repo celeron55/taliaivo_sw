@@ -438,7 +438,18 @@ impl BrainState {
         AlgorithmType::DirectControl => {
             info!("accepted_servo_inputs: {:?}, servo_inputs: {:?}",
                     self.accepted_servo_inputs, servo_inputs);
-            let linear = if self.accepted_servo_inputs[0] <= -0.2 {
+            let linear = if self.accepted_servo_inputs[1] <= -0.2 {
+                0.0
+            } else {
+                if self.accepted_servo_inputs[1] > 0.4 && self.accepted_servo_inputs[1] < 0.6 {
+                    // Deadzone
+                    0.0
+                } else {
+                    // TODO: Correct magnitude
+                    (self.accepted_servo_inputs[1] * 2.0 - 1.0) * 50.0
+                }
+            };
+            let rotation = if self.accepted_servo_inputs[0] <= -0.2 {
                 0.0
             } else {
                 if self.accepted_servo_inputs[0] > 0.4 && self.accepted_servo_inputs[0] < 0.6 {
@@ -446,13 +457,11 @@ impl BrainState {
                     0.0
                 } else {
                     // TODO: Correct magnitude
-                    (self.accepted_servo_inputs[0] * 2.0 - 1.0) * 100.0
+                    (self.accepted_servo_inputs[0] * 2.0 - 1.0) * 50.0
                 }
             };
-            // TODO: Turning via second servo input channel
-            //let rotation = (self.accepted_servo_inputs[0] * 2.0 - 1.0) * 5.0;
-            let wheel_speed_left = linear;
-            let wheel_speed_right = linear;
+            let wheel_speed_left = -linear + rotation;
+            let wheel_speed_right = -linear - rotation;
             robot.set_motor_speed(wheel_speed_left, wheel_speed_right);
             return;
         },
